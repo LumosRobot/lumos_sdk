@@ -18,12 +18,12 @@ int main(int argc, char* argv[])
     // 控制机器人切换到RESET状态
     LOG(INFO) << "try switching to RESET mode...";
     manager.SendRobotCmd(SdkStateType::RESET);
-    sleep(5);
+    sleep(10);
 
     // 控制机器人切换到STAND状态
     LOG(INFO) << "try switching to STAND mode...";
     manager.SendRobotCmd(SdkStateType::STAND);
-    sleep(5);
+    sleep(20);
 
     // 控制机器人切换到RL_WALK状态
     LOG(INFO) << "try switching to RL_WALK mode...";
@@ -33,7 +33,7 @@ int main(int argc, char* argv[])
     // 在RL_WALK状态下，控制机器人向前行走
     LOG(INFO) << "in RL_WALK mode, try moving forwark...";
     manager.SendRobotCmd(SdkStateType::RL_WALK, 0.2);
-    sleep(5);
+    sleep(10);
 
     // 在RL_WALK状态下，控制机器人停止行走
     LOG(INFO) << "in RL_WALK mode, try stopping moving...";
