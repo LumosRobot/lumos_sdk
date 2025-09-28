@@ -13,6 +13,7 @@ make
 
 ### 运行环境及配置
 确保SDK的运行环境与机器人处于同一个网段（192.168.54.XXX）
+
 lcm通过LUMOS_LCM_URL_PORT配置，位于sdk_base_define.hpp
 
 
@@ -33,12 +34,12 @@ bool SendRobotCmd(SdkStateType state, float x = 0, float y = 0, float yaw = 0);
 用于切换机器人状态，以及控制对应状态下的运行参数。
 参数说明：
 - SdkStateType
-  - 当前支持切换的状态：RESET、STAND、RL_WALK、RL_MIMIC、RL_NAV
+  - 当前支持切换的状态：RESET、STAND、RL_WALK、RL_MIMIC、RL_NAV、DEBUG
 - x, y, yaw
   -  仅RL_WALK 和RL_NAV 状态下才有效
-  -  x: 机器人前进方向移动速度
-  -  y: 机器人侧向移动速度
-  -  yaw: 机身角速度
+  -  x: 机器人前进方向移动速度，单位m/s
+  -  y: 机器人侧向移动速度，单位m/s
+  -  yaw: 机身角速度，单位rad/s
 
 
 #### SendJointCmds
@@ -65,11 +66,13 @@ SdkJointCmd结构字段说明：
     ...
 
     // 发送机器人切换状态及控制命令
+    // 控制机器人行走，请按这个状态切换：RESET -> STAND -> RL_WALK
     manager.SendRobotCmd(...);
 
     ...
 
     // 发送关节控制命令
+    // 需要保证当前处于DEBUG状态，目前DEBUG状态只能从RESET状态切换
     manager.SendJointCmds(...);
 ```
 

@@ -15,6 +15,10 @@ int main(int argc, char* argv[])
     manager.Init();
     sleep(5);
 
+    LOG(INFO) << "try switching to RESET mode...";
+    manager.SendRobotCmd(SdkStateType::RESET);
+    sleep(5);
+
     LOG(INFO) << "try switching to DEBUG mode...";
     manager.SendRobotCmd(SdkStateType::DEBUG);
     sleep(5);

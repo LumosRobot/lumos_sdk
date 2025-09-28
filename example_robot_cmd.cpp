@@ -20,6 +20,11 @@ int main(int argc, char* argv[])
     manager.SendRobotCmd(SdkStateType::RESET);
     sleep(5);
 
+    // 控制机器人切换到STAND状态
+    LOG(INFO) << "try switching to STAND mode...";
+    manager.SendRobotCmd(SdkStateType::STAND);
+    sleep(5);
+
     // 控制机器人切换到RL_WALK状态
     LOG(INFO) << "try switching to RL_WALK mode...";
     manager.SendRobotCmd(SdkStateType::RL_WALK);

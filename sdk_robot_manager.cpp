@@ -28,6 +28,14 @@ bool SdkRobotManager::SendRobotCmd(SdkStateType state, float x, float y, float y
         return false;
     }
 
+    bool is_valid = (-0.5 <= x && x <= 0.5);
+    is_valid = is_valid && (-0.3 <= y && y <= 0.3);
+    is_valid = is_valid && (-0.5 <= yaw && yaw <= 0.5);
+    if (!is_valid) {
+        LOG(ERROR) << "failed to SendRobotCmd, parameter invalid";
+        return false;
+    }
+
     lumos_lcm_control robot_cmd;
     robot_cmd.state = state;
     robot_cmd.x = x;
