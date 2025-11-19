@@ -15,13 +15,17 @@ int main(int argc, char* argv[])
     manager.Init();
     sleep(5);
 
-    LOG(INFO) << "try switching to RESET mode...";
+    LOG(INFO) << "try switching to RESET state...";
     manager.SendRobotCmd(SdkStateType::RESET);
-    sleep(5);
+    sleep(10);
 
-    LOG(INFO) << "try switching to DEBUG mode...";
-    manager.SendRobotCmd(SdkStateType::DEBUG);
-    sleep(5);
+    LOG(INFO) << "try switching to STAND state...";
+    manager.SendRobotCmd(SdkStateType::STAND);
+    sleep(10);
+
+    LOG(INFO) << "try switching to SDK control mode...";
+    manager.SendModeCmd(1);
+    sleep(2);
 
     int leg_joints_num = 6;
     float leg_stand_poses[] = { -0.1, 0, 0, 0.2, -0.1, 0 };
@@ -31,11 +35,11 @@ int main(int argc, char* argv[])
     std::vector<SdkJointCmd> reset_cmds(leg_joints_num);
     std::vector<SdkJointCmd> stand_cmds(leg_joints_num);
     for (size_t i = 0; i < stand_cmds.size(); ++i) {
-        reset_cmds[i].component_type = SdkComponentType::LEG_R;
+        reset_cmds[i].component_type = static_cast<int16_t>(SdkComponentType::LEG_R);
         reset_cmds[i].joint_id = i;
         reset_cmds[i].ctrlWord = 200;
 
-        stand_cmds[i].component_type = SdkComponentType::LEG_R;
+        stand_cmds[i].component_type = static_cast<int16_t>(SdkComponentType::LEG_R);
         stand_cmds[i].joint_id = i;
         stand_cmds[i].ctrlWord = 3;
         stand_cmds[i].tarPos = leg_stand_poses[i];
@@ -45,7 +49,7 @@ int main(int argc, char* argv[])
         stand_cmds[i].res2 = leg_stand_kds[i];
     }
 
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < 3; ++i) {
         LOG(INFO) << "try SendJointCmds by stand_cmds...";
         manager.SendJointCmds(stand_cmds);
         sleep(5);
@@ -54,6 +58,10 @@ int main(int argc, char* argv[])
         manager.SendJointCmds(reset_cmds);
         sleep(5);
     }
+
+    LOG(INFO) << "try switching to RL control mode...";
+    manager.SendModeCmd(0);
+    sleep(2);
 
     google::ShutdownGoogleLogging();
     return 0;
