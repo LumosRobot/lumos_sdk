@@ -139,6 +139,26 @@ bool SdkRobotManager::SetImuDataCb(ImuDateCb cb) {
     return true;
 }
 
+bool SdkRobotManager::SetGameHandlerCmdCb(GameHandlerCmdCb cb) {
+    if (!lcm_.good()) {
+        LOG(ERROR) << "failed to SetGameHandlerCmdCb, lcm not good";
+        return false;
+    }
+    if (!cb) {
+        LOG(ERROR) << "failed to SetGameHandlerCmdCb, callback function is nullptr";
+        return false;
+    }
+
+    lcm::LCM::HandlerFunction<lumos_lcm_control> handle_func;
+    handle_func = [cb](const lcm::ReceiveBuffer* rbuf, const std::string& channel, const lumos_lcm_control* msg) {
+        cb(msg);
+    };
+    lcm_.subscribe("lcm_robot_cmd", handle_func);
+
+    LOG(INFO) << "set gamehandler cmd callback success";
+    return true;
+}
+
 void SdkRobotManager::HandleLcmRecv() {
     LOG(INFO) << "handle lcm recv thread running...";
     while (true) {

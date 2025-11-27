@@ -5,9 +5,11 @@
 #include <lcm/lcm-cpp.hpp>
 #include <sdk_lcmt_joint_datasets.hpp>
 #include <microstrain_lcmt.hpp>
+#include <lumos_lcm_control.hpp>
 
 using JointDateCb = void (*)(const sdk_lcmt_joint_datasets*);
 using ImuDateCb = void (*)(const microstrain_lcmt*);
+using GameHandlerCmdCb = void (*)(const lumos_lcm_control*);
 
 class SdkRobotManager {
 public:
@@ -22,6 +24,7 @@ public:
 
     bool SetJointDataCb(JointDateCb cb);
     bool SetImuDataCb(ImuDateCb cb);
+    bool SetGameHandlerCmdCb(GameHandlerCmdCb cb);
 
 private:
     void HandleLcmRecv();
