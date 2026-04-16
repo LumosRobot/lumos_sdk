@@ -32,4 +32,5 @@ private:
 private:
     lcm::LCM lcm_;
     std::thread lcm_thread_;
+    std::atomic<bool> running_{false};
 };

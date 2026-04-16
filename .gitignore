@@ -1,4 +1,6 @@
 build
 *.txt
 *.csv
+*.swp
+
 
