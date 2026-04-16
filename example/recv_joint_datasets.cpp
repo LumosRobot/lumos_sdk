@@ -36,7 +36,7 @@ int main(int argc, char* argv[])
 
     LOG(INFO) << "try switching to STAND state...";
     manager.SendRobotCmd(SdkStateType::STAND);
-    sleep(10);
+    sleep(30);
 
     LOG(INFO) << "try switching to SDK control mode...";
     manager.SendModeCmd(1);
@@ -44,7 +44,11 @@ int main(int argc, char* argv[])
 
     manager.SetJointDataCb(joint_data_handler);
     LOG(INFO) << "SetJointDataCb done, waiting for handler...";
-    sleep(1000000);
+    sleep(10);
+
+    manager.SendRobotCmd(SdkStateType::RL_LIEDOWN);
+    LOG(INFO) << "try switching to RL_LIEDOWN state...";
+    sleep(30);
 
     google::ShutdownGoogleLogging();
     return 0;

@@ -21,38 +21,18 @@ SdkRobotManager::SdkRobotManager() : lcm_(LUMOS_LCM_URL_PORT) {
 }
 
 SdkRobotManager::~SdkRobotManager() {
-    running_ = false; // 通知线程停止
-    if (lcm_thread_.joinable()) {
-        lcm_thread_.join(); // 等待线程安全退出
-    }
+
 }
 
-
 void SdkRobotManager::Init() {
-    // 1. Ensure LCM is actually ready
     while (!lcm_.good()) {
         LOG(WARNING) << "waiting for lcm ready...";
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
-    // 2. Start the thread LAST
-    // Use a stop flag to allow for graceful shutdown later
-    running_ = true; 
     lcm_thread_ = std::thread(&SdkRobotManager::HandleLcmRecv, this);
-    
     LOG(INFO) << "SdkRobotManager init done";
 }
-
-void SdkRobotManager::HandleLcmRecv() {
-    LOG(INFO) << "handle lcm recv thread running...";
-    // Use a condition check instead of while(true)
-    while (running_ && lcm_.good()) {
-        if (lcm_.handleTimeout(100) < 0) { // Reduced timeout for better responsiveness
-            break;
-        }
-    }
-}
-
 
 bool SdkRobotManager::SendRobotCmd(SdkStateType state, float vx, float vy, float vyaw) {
     if (!lcm_.good()) {
@@ -128,13 +108,13 @@ bool SdkRobotManager::SetJointDataCb(JointDateCb cb) {
         LOG(ERROR) << "failed to SetJointDataCb, callback function is nullptr";
         return false;
     }
-
+    LOG(INFO) << "Expected hash for sdk_lcmt_joint_datasets: " << sdk_lcmt_joint_datasets::getHash();
     lcm::LCM::HandlerFunction<sdk_lcmt_joint_datasets> handle_func;
     handle_func = [cb](const lcm::ReceiveBuffer* rbuf, const std::string& channel, const sdk_lcmt_joint_datasets* msg) {
         cb(msg);
     };
     lcm_.subscribe("JointsData", handle_func);
-
+    
     LOG(INFO) << "set joint data callback success";
     return true;
 }
@@ -179,3 +159,9 @@ bool SdkRobotManager::SetGameHandlerCmdCb(GameHandlerCmdCb cb) {
     return true;
 }
 
+void SdkRobotManager::HandleLcmRecv() {
+    LOG(INFO) << "handle lcm recv thread running...";
+    while (true) {
+        lcm_.handleTimeout(1000);
+    }
+}

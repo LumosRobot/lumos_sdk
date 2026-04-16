@@ -42,7 +42,11 @@ int main(int argc, char* argv[])
 
     manager.SetImuDataCb(imu_data_handler);
     LOG(INFO) << "SetImuDataCb done, waiting for handler...";
-    sleep(1000000);
+    sleep(10);
+
+    manager.SendRobotCmd(SdkStateType::RL_LIEDOWN);
+    LOG(INFO) << "try switching to RL_LIEDOWN state...";
+    sleep(30);
 
     google::ShutdownGoogleLogging();
     return 0;
