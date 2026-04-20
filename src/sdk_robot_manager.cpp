@@ -49,6 +49,7 @@ bool SdkRobotManager::SendRobotCmd(SdkStateType state, float vx, float vy, float
     robot_cmd.x = vx;
     robot_cmd.y = vy;
     robot_cmd.yaw = vyaw;
+    robot_cmd.upstate = 0;
 
     bool ret = (0 == lcm_.publish("lcm_controller", &robot_cmd));
     LOG(INFO) << "SendRobotCmd, state=" << (int)state << ", vx=" << vx << ", vy=" << vy << ", vyaw=" << vyaw << ", ret=" << ret;
@@ -108,13 +109,13 @@ bool SdkRobotManager::SetJointDataCb(JointDateCb cb) {
         LOG(ERROR) << "failed to SetJointDataCb, callback function is nullptr";
         return false;
     }
-    LOG(INFO) << "Expected hash for sdk_lcmt_joint_datasets: " << sdk_lcmt_joint_datasets::getHash();
+
     lcm::LCM::HandlerFunction<sdk_lcmt_joint_datasets> handle_func;
     handle_func = [cb](const lcm::ReceiveBuffer* rbuf, const std::string& channel, const sdk_lcmt_joint_datasets* msg) {
         cb(msg);
     };
     lcm_.subscribe("JointsData", handle_func);
-    
+
     LOG(INFO) << "set joint data callback success";
     return true;
 }
