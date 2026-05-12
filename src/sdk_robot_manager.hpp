@@ -2,6 +2,7 @@
 #include "sdk_base_define.hpp"
 #include <vector>
 #include <thread>
+#include <atomic>
 #include <lcm/lcm-cpp.hpp>
 #include <sdk_lcmt_joint_datasets.hpp>
 #include <microstrain_lcmt.hpp>
@@ -26,10 +27,14 @@ public:
     bool SetImuDataCb(ImuDateCb cb);
     bool SetGameHandlerCmdCb(GameHandlerCmdCb cb);
 
+    // Call in control loop to dispatch LCM messages (triggers callbacks)
+    int HandleLcmTimeout(int timeout_ms = 0) { return lcm_.handleTimeout(timeout_ms); }
+
 private:
     void HandleLcmRecv();
 
 private:
     lcm::LCM lcm_;
     std::thread lcm_thread_;
+    std::atomic<bool> stop_flag_{false};
 };

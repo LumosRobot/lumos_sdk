@@ -1,6 +1,7 @@
 #include "sdk_robot_manager.hpp"
 #include <unistd.h>
 #include <glog/logging.h>
+#include <memory>
 #include "sdk_lcmt_joint_datasets.hpp"
 
 static void joint_data_handler(const sdk_lcmt_joint_datasets* joint_datasets) {
@@ -26,27 +27,27 @@ int main(int argc, char* argv[])
     FLAGS_minloglevel = 0;          // 设置最小日志级别，0=INFO, 1=WARNING, 2=ERROR, 3=FATAL
     google::InitGoogleLogging(argv[0]);
 
-    SdkRobotManager manager;
-    manager.Init();
+    auto manager = std::make_shared<SdkRobotManager>();
+    manager->Init();
     sleep(5);
 
     LOG(INFO) << "try switching to RESET state...";
-    manager.SendRobotCmd(SdkStateType::RESET);
+    manager->SendRobotCmd(SdkStateType::RESET);
     sleep(10);
 
     LOG(INFO) << "try switching to STAND state...";
-    manager.SendRobotCmd(SdkStateType::STAND);
+    manager->SendRobotCmd(SdkStateType::STAND);
     sleep(30);
 
     LOG(INFO) << "try switching to SDK control mode...";
-    manager.SendModeCmd(1);
+    manager->SendModeCmd(1);
     sleep(2);
 
-    manager.SetJointDataCb(joint_data_handler);
+    manager->SetJointDataCb(joint_data_handler);
     LOG(INFO) << "SetJointDataCb done, waiting for handler...";
     sleep(10);
 
-    manager.SendRobotCmd(SdkStateType::RL_LIEDOWN);
+    manager->SendRobotCmd(SdkStateType::RL_LIEDOWN);
     LOG(INFO) << "try switching to RL_LIEDOWN state...";
     sleep(30);
 

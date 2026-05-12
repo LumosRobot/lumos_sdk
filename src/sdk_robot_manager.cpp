@@ -21,7 +21,10 @@ SdkRobotManager::SdkRobotManager() : lcm_(LUMOS_LCM_URL_PORT) {
 }
 
 SdkRobotManager::~SdkRobotManager() {
-
+    stop_flag_ = true;
+    if (lcm_thread_.joinable()) {
+        lcm_thread_.join();
+    }
 }
 
 void SdkRobotManager::Init() {
@@ -162,7 +165,7 @@ bool SdkRobotManager::SetGameHandlerCmdCb(GameHandlerCmdCb cb) {
 
 void SdkRobotManager::HandleLcmRecv() {
     LOG(INFO) << "handle lcm recv thread running...";
-    while (true) {
+    while (!stop_flag_) {
         lcm_.handleTimeout(1000);
     }
 }
