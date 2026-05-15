@@ -1,9 +1,9 @@
 #include "sdk_robot_manager.hpp"
 #include <unistd.h>
 #include <glog/logging.h>
-#include "lumos_lcm_control.hpp"
+#include "robot_cmd_lcmt.hpp"
 
-static void gamehandler_cmd_handler(const lumos_lcm_control* gamehandler_cmd) {
+static void gamehandler_cmd_handler(const robot_cmd_lcmt* gamehandler_cmd) {
     static uint64_t s_counter = 0;
     if (++s_counter % 100 == 0) {
         LOG(INFO) << "--- gamehandler cmd received, seq " << s_counter << "---";

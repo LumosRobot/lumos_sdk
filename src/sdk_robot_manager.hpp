@@ -6,11 +6,11 @@
 #include <lcm/lcm-cpp.hpp>
 #include <sdk_lcmt_joint_datasets.hpp>
 #include <microstrain_lcmt.hpp>
-#include <lumos_lcm_control.hpp>
+#include <robot_cmd_lcmt.hpp>
 
 using JointDateCb = void (*)(const sdk_lcmt_joint_datasets*);
 using ImuDateCb = void (*)(const microstrain_lcmt*);
-using GameHandlerCmdCb = void (*)(const lumos_lcm_control*);
+using GameHandlerCmdCb = void (*)(const robot_cmd_lcmt*);
 
 class SdkRobotManager {
 public:

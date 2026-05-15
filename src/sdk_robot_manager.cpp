@@ -1,7 +1,7 @@
 #include "sdk_robot_manager.hpp"
 #include <chrono>
 #include <glog/logging.h>
-#include "lumos_lcm_control.hpp"
+#include "robot_cmd_lcmt.hpp"
 #include "sdk_lcmt_joint_cmds.hpp"
 #include "sdk_lcmt_type.hpp"
 
@@ -47,14 +47,13 @@ bool SdkRobotManager::SendRobotCmd(SdkStateType state, float vx, float vy, float
     ensure_range(vy, -0.3, 0.3);
     ensure_range(vyaw, -0.5, 0.5);
 
-    lumos_lcm_control robot_cmd;
+    robot_cmd_lcmt robot_cmd;
     robot_cmd.state = static_cast<int8_t>(state);
     robot_cmd.x = vx;
     robot_cmd.y = vy;
     robot_cmd.yaw = vyaw;
-    robot_cmd.upstate = 0;
 
-    bool ret = (0 == lcm_.publish("lcm_controller", &robot_cmd));
+    bool ret = (0 == lcm_.publish("lcm_robot_cmd", &robot_cmd));
     LOG(INFO) << "SendRobotCmd, state=" << (int)state << ", vx=" << vx << ", vy=" << vy << ", vyaw=" << vyaw << ", ret=" << ret;
     return ret;
 }
@@ -153,11 +152,11 @@ bool SdkRobotManager::SetGameHandlerCmdCb(GameHandlerCmdCb cb) {
         return false;
     }
 
-    lcm::LCM::HandlerFunction<lumos_lcm_control> handle_func;
-    handle_func = [cb](const lcm::ReceiveBuffer* rbuf, const std::string& channel, const lumos_lcm_control* msg) {
+    lcm::LCM::HandlerFunction<robot_cmd_lcmt> handle_func;
+    handle_func = [cb](const lcm::ReceiveBuffer* rbuf, const std::string& channel, const robot_cmd_lcmt* msg) {
         cb(msg);
     };
-    lcm_.subscribe("lcm_robot_cmd", handle_func);
+    lcm_.subscribe("lcm_robot_cmd_echo", handle_func);
 
     LOG(INFO) << "set gamehandler cmd callback success";
     return true;
