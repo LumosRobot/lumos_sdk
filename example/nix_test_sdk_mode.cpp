@@ -97,7 +97,7 @@ int main(int argc, char* argv[]) {
     LOG(INFO) << "=== Step 2: Transition to RESET ===";
     manager.SendRobotCmd(SdkStateType::RESET);
     if (!wait_state(manager, 1, 10)) goto cleanup;
-    sleep(1);
+    sleep(2);
 
     // ================================================================
     // Step 3: STAND state
@@ -106,7 +106,7 @@ int main(int argc, char* argv[]) {
     if (!g_running) goto cleanup;
     manager.SendRobotCmd(SdkStateType::STAND);
     if (!wait_state(manager, 2, 10)) goto cleanup;
-    sleep(2);
+    sleep(10);
 
     // ================================================================
     // Step 4: RL_WALK_AMP - walk forward at 0.1 m/s for 3s
@@ -115,11 +115,11 @@ int main(int argc, char* argv[]) {
     if (!g_running) goto cleanup;
     manager.SendRobotCmd(SdkStateType::RL_WALK_AMP, 0.1f);
     if (!wait_state(manager, 12, 10)) goto cleanup;
-    sleep(3);
+    sleep(5);
 
     // Stop walking
     manager.SendRobotCmd(SdkStateType::RL_WALK_AMP, 0.0f);
-    sleep(1);
+    sleep(5);
 
     // ================================================================
     // Step 5: Back to RESET
@@ -128,7 +128,7 @@ int main(int argc, char* argv[]) {
     if (!g_running) goto cleanup;
     manager.SendRobotCmd(SdkStateType::RESET);
     if (!wait_state(manager, 1, 10)) goto cleanup;
-    sleep(1);
+    sleep(2);
 
     // ================================================================
     // Step 6: Back to STAND then exit SDK mode
@@ -137,7 +137,7 @@ int main(int argc, char* argv[]) {
     if (!g_running) goto cleanup;
     manager.SendRobotCmd(SdkStateType::STAND);
     if (!wait_state(manager, 2, 10)) goto cleanup;
-    sleep(1);
+    sleep(10);
 
     manager.SendModeCmd(0);
     sleep(1);
