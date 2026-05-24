@@ -3,6 +3,4 @@ build
 *.csv
 *.swp
 dataset
-
-
-
+.omc

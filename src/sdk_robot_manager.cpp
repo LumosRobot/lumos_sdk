@@ -162,6 +162,26 @@ bool SdkRobotManager::SetGameHandlerCmdCb(GameHandlerCmdCb cb) {
     return true;
 }
 
+bool SdkRobotManager::SetRobotStatusCb(RobotStatusCb cb) {
+    if (!lcm_.good()) {
+        LOG(ERROR) << "failed to SetRobotStatusCb, lcm not good";
+        return false;
+    }
+    if (!cb) {
+        LOG(ERROR) << "failed to SetRobotStatusCb, callback function is nullptr";
+        return false;
+    }
+
+    lcm::LCM::HandlerFunction<robot_status_lcmt> handle_func;
+    handle_func = [cb](const lcm::ReceiveBuffer* rbuf, const std::string& channel, const robot_status_lcmt* msg) {
+        cb(msg);
+    };
+    lcm_.subscribe("lcm_robot_status", handle_func);
+
+    LOG(INFO) << "set robot status callback success";
+    return true;
+}
+
 void SdkRobotManager::HandleLcmRecv() {
     LOG(INFO) << "handle lcm recv thread running...";
     while (!stop_flag_) {

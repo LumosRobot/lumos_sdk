@@ -7,10 +7,12 @@
 #include <sdk_lcmt_joint_datasets.hpp>
 #include <microstrain_lcmt.hpp>
 #include <robot_cmd_lcmt.hpp>
+#include <robot_status_lcmt.hpp>
 
 using JointDateCb = void (*)(const sdk_lcmt_joint_datasets*);
 using ImuDateCb = void (*)(const microstrain_lcmt*);
 using GameHandlerCmdCb = void (*)(const robot_cmd_lcmt*);
+using RobotStatusCb = void (*)(const robot_status_lcmt*);
 
 class SdkRobotManager {
 public:
@@ -26,6 +28,7 @@ public:
     bool SetJointDataCb(JointDateCb cb);
     bool SetImuDataCb(ImuDateCb cb);
     bool SetGameHandlerCmdCb(GameHandlerCmdCb cb);
+    bool SetRobotStatusCb(RobotStatusCb cb);
 
     // Call in control loop to dispatch LCM messages (triggers callbacks)
     int HandleLcmTimeout(int timeout_ms = 0) { return lcm_.handleTimeout(timeout_ms); }
