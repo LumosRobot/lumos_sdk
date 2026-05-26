@@ -67,4 +67,6 @@ enum class SdkStateType
   // DEBUG = 10,
   RL_NAV = 11,
   RL_WALK_AMP,
+  BY_MIMIC = 20,
+  BFM_MIMIC = 21,
 };

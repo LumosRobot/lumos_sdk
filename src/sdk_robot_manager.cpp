@@ -37,7 +37,7 @@ void SdkRobotManager::Init() {
     LOG(INFO) << "SdkRobotManager init done";
 }
 
-bool SdkRobotManager::SendRobotCmd(SdkStateType state, float vx, float vy, float vyaw) {
+bool SdkRobotManager::SendRobotCmd(SdkStateType state, float vx, float vy, float vyaw, int8_t policy_type) {
     if (!lcm_.good()) {
         LOG(ERROR) << "failed to SendRobotCmd, lcm not good";
         return false;
@@ -52,9 +52,11 @@ bool SdkRobotManager::SendRobotCmd(SdkStateType state, float vx, float vy, float
     robot_cmd.x = vx;
     robot_cmd.y = vy;
     robot_cmd.yaw = vyaw;
+    robot_cmd.policy_type = policy_type;
 
     bool ret = (0 == lcm_.publish("lcm_robot_cmd", &robot_cmd));
-    LOG(INFO) << "SendRobotCmd, state=" << (int)state << ", vx=" << vx << ", vy=" << vy << ", vyaw=" << vyaw << ", ret=" << ret;
+    LOG(INFO) << "SendRobotCmd, state=" << (int)state << ", vx=" << vx << ", vy=" << vy << ", vyaw=" << vyaw
+              << ", policy_type=" << (int)policy_type << ", ret=" << ret;
     return ret;
 }
 

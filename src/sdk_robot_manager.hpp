@@ -21,7 +21,7 @@ public:
 
     void Init();
 
-    bool SendRobotCmd(SdkStateType state, float vx = 0, float vy = 0, float vyaw = 0);
+    bool SendRobotCmd(SdkStateType state, float vx = 0, float vy = 0, float vyaw = 0, int8_t policy_type = 0);
     bool SendJointCmds(const std::vector<SdkJointCmd>& joint_cmds);
     bool SendModeCmd(int mode); // 0: RL control mode,  1: SDK control mode
 
