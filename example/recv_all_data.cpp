@@ -42,11 +42,8 @@ struct JointRecord {
     int16_t joint_id;
     int16_t stat;
     float pos_high;
-    int16_t num_cycles_high;
     float pos_low;
-    int16_t num_cycles_low;
     float vel;
-    float cur;
     float tor;
 };
 static std::vector<JointRecord> g_joint_records;
@@ -136,11 +133,8 @@ static void on_joint_data(const sdk_lcmt_joint_datasets* msg) {
             d.joint_id,
             d.stat,
             d.pos_high,
-            d.num_cycles_high,
             d.pos_low,
-            d.num_cycles_low,
             d.vel,
-            d.cur,
             d.tor
         });
     }
@@ -225,7 +219,7 @@ static void write_joint_csv(const std::string& path) {
     std::ofstream f = open_csv_for_append(
         path,
         "timestamp,component_type,component_name,joint_id,stat,"
-        "pos_high,num_cycles_high,pos_low,num_cycles_low,vel,cur,tor");
+        "pos_high,pos_low,vel,tor");
     {
         std::lock_guard<std::mutex> lock(g_data_mutex);
         for (const auto& r : g_joint_records) {
@@ -235,11 +229,8 @@ static void write_joint_csv(const std::string& path) {
               << r.joint_id << ","
               << r.stat << ","
               << r.pos_high << ","
-              << r.num_cycles_high << ","
               << r.pos_low << ","
-              << r.num_cycles_low << ","
               << r.vel << ","
-              << r.cur << ","
               << r.tor << "\n";
         }
     }
@@ -377,7 +368,7 @@ int main(int argc, char* argv[]) {
     manager.SendRobotCmd(SdkStateType::STAND);
     if (!wait_state(2, 15)) goto save;
     sleep(2);
-    manager.SendRobotCmd(SdkStateType::BY_MIMIC, 0, 0, 0, 2); // 修改舞蹈在这里设置！！！
+    // manager.SendRobotCmd(SdkStateType::BY_MIMIC, 0, 0, 0, 2); // 修改舞蹈在这里设置！！！
     // After entering MIMIC, the robot stays in that state until we switch out
     sleep(10);
 
