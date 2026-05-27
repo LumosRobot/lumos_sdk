@@ -44,8 +44,8 @@
 // 控制范围 — 三选一，只保留一个不注释的
 // ═══════════════════════════════════════════════════════════════════
 //#define CONTROL_ALL
-//#define CONTROL_COMPONENT static_cast<int>(SdkComponentType::WAIST)  // ARM_L | ARM_R | WAIST | LEG_L | LEG_R
-#define CONTROL_SINGLE  8          // 全局索引: 8 = WAIST 腰
+#define CONTROL_COMPONENT static_cast<int>(SdkComponentType::LEG_R)  // ARM_L | ARM_R | WAIST | LEG_L | LEG_R
+//#define CONTROL_SINGLE  8          // 全局索引: 8 = WAIST 腰
 
 // ═══════════════════════════════════════════════════════════════════
 // 下发模式 — 二选一
@@ -97,18 +97,21 @@ struct JointTarget {
 // --- ARM_L (全局索引 0-3) ------------------------------------------
 static JointTarget g_arm_l[4] = {
     // component_type, joint_id, ctrlWord, tarPos, tarVel, tarTor, kp,  kd
-    { static_cast<int>(SdkComponentType::ARM_L), 0, 3,  0.0f,   0.0f, 0.0f, 160.0f, 6.0f },  // 肩俯仰
-    { static_cast<int>(SdkComponentType::ARM_L), 1, 3,  0.25f,  0.0f, 0.0f, 160.0f, 6.0f },  // 肩横滚 (YAML: 0.25)
-    { static_cast<int>(SdkComponentType::ARM_L), 2, 3,  0.0f,   0.0f, 0.0f, 160.0f, 6.0f },  // 肩偏航
-    { static_cast<int>(SdkComponentType::ARM_L), 3, 3,  0.0f,   0.0f, 0.0f, 160.0f, 6.0f },  // 肘
+    // 左臂前伸验证姿态。幅度保守，先用于确认单肢体覆盖链路；如方向相反，
+    // 优先只调整 shoulder_pitch 的符号，不要一次扩大多个关节幅度。
+    { static_cast<int>(SdkComponentType::ARM_L), 0, 3, -0.35f,  0.0f, 0.0f, 120.0f, 5.0f },  // 肩俯仰：前伸主关节
+    { static_cast<int>(SdkComponentType::ARM_L), 1, 3,  0.20f,  0.0f, 0.0f, 120.0f, 5.0f },  // 肩横滚：接近站立外展
+    { static_cast<int>(SdkComponentType::ARM_L), 2, 3, -0.20f,  0.0f, 0.0f, 120.0f, 5.0f },  // 肩偏航：轻微内收对齐前方
+    { static_cast<int>(SdkComponentType::ARM_L), 3, 3, -0.45f,  0.0f, 0.0f, 120.0f, 5.0f },  // 肘：轻微弯曲，避免完全伸直
 };
 
 // --- ARM_R (全局索引 4-7) ------------------------------------------
 static JointTarget g_arm_r[4] = {
-    { static_cast<int>(SdkComponentType::ARM_R), 0, 3,  0.0f,   0.0f, 0.0f, 160.0f, 6.0f },
-    { static_cast<int>(SdkComponentType::ARM_R), 1, 3, -0.25f,  0.0f, 0.0f, 160.0f, 6.0f },  // 右肩横滚 (YAML: -0.25)
-    { static_cast<int>(SdkComponentType::ARM_R), 2, 3,  0.0f,   0.0f, 0.0f, 160.0f, 6.0f },
-    { static_cast<int>(SdkComponentType::ARM_R), 3, 3,  0.0f,   0.0f, 0.0f, 160.0f, 6.0f },
+    // 右臂前伸验证姿态。肩俯仰与左臂同号；横滚/偏航按左右镜像取相反号。
+    { static_cast<int>(SdkComponentType::ARM_R), 0, 3, -0.35f,  0.0f, 0.0f, 120.0f, 5.0f },  // 肩俯仰：前伸主关节
+    { static_cast<int>(SdkComponentType::ARM_R), 1, 3, -0.20f,  0.0f, 0.0f, 120.0f, 5.0f },  // 肩横滚：接近站立外展
+    { static_cast<int>(SdkComponentType::ARM_R), 2, 3,  0.20f,  0.0f, 0.0f, 120.0f, 5.0f },  // 肩偏航：轻微内收对齐前方
+    { static_cast<int>(SdkComponentType::ARM_R), 3, 3, -0.45f,  0.0f, 0.0f, 120.0f, 5.0f },  // 肘：轻微弯曲，避免完全伸直
 };
 
 // --- WAIST (全局索引 8) ---------------------------------------------
@@ -119,22 +122,24 @@ static JointTarget g_waist[1] = {
 
 // --- LEG_L (全局索引 9-14) -----------------------------------------
 static JointTarget g_leg_l[6] = {
-    { static_cast<int>(SdkComponentType::LEG_L), 0, 3, -0.1f,   0.0f, 0.0f, 160.0f, 6.0f },  // 髋俯仰 (YAML: -0.1)
-    { static_cast<int>(SdkComponentType::LEG_L), 1, 3,  0.0f,   0.0f, 0.0f, 160.0f, 6.0f },  // 髋横滚
-    { static_cast<int>(SdkComponentType::LEG_L), 2, 3,  0.0f,   0.0f, 0.0f, 160.0f, 6.0f },  // 髋偏航
-    { static_cast<int>(SdkComponentType::LEG_L), 3, 3,  0.2f,   0.0f, 0.0f, 160.0f, 6.0f },  // 膝 (YAML: 0.2)
-    { static_cast<int>(SdkComponentType::LEG_L), 4, 3, -0.15f,  0.0f, 0.0f,  60.0f, 0.8f },  // 踝俯仰 (YAML: -0.15 / kp=60 / kd=0.8)
-    { static_cast<int>(SdkComponentType::LEG_L), 5, 3,  0.0f,   0.0f, 0.0f,  60.0f, 0.8f },  // 踝横滚 (YAML: 0.0 / kp=60 / kd=0.8)
+    // 左腿前伸验证姿态。只改矢状面三个关节，横滚/偏航保持站立值，降低侧向失稳风险。
+    { static_cast<int>(SdkComponentType::LEG_L), 0, 3, -0.35f,  0.0f, 0.0f, 160.0f, 6.0f },  // 髋俯仰：从站立 -0.10 小幅前伸
+    { static_cast<int>(SdkComponentType::LEG_L), 1, 3,  0.0f,   0.0f, 0.0f, 160.0f, 6.0f },  // 髋横滚：保持站立
+    { static_cast<int>(SdkComponentType::LEG_L), 2, 3,  0.0f,   0.0f, 0.0f, 160.0f, 6.0f },  // 髋偏航：保持站立
+    { static_cast<int>(SdkComponentType::LEG_L), 3, 3,  0.35f,  0.0f, 0.0f, 160.0f, 6.0f },  // 膝：轻微屈膝，给前伸留余量
+    { static_cast<int>(SdkComponentType::LEG_L), 4, 3, -0.22f,  0.0f, 0.0f,  60.0f, 0.8f },  // 踝俯仰：配合髋/膝，保持脚姿态温和变化
+    { static_cast<int>(SdkComponentType::LEG_L), 5, 3,  0.0f,   0.0f, 0.0f,  60.0f, 0.8f },  // 踝横滚：保持站立
 };
 
 // --- LEG_R (全局索引 15-20) ----------------------------------------
 static JointTarget g_leg_r[6] = {
-    { static_cast<int>(SdkComponentType::LEG_R), 0, 3, -0.1f,   0.0f, 0.0f, 160.0f, 6.0f },
-    { static_cast<int>(SdkComponentType::LEG_R), 1, 3,  0.0f,   0.0f, 0.0f, 160.0f, 6.0f },
-    { static_cast<int>(SdkComponentType::LEG_R), 2, 3,  0.0f,   0.0f, 0.0f, 160.0f, 6.0f },
-    { static_cast<int>(SdkComponentType::LEG_R), 3, 3,  0.0f,   0.0f, 0.0f, 160.0f, 6.0f },
-    { static_cast<int>(SdkComponentType::LEG_R), 4, 3, -0.15f,  0.0f, 0.0f,  60.0f, 0.8f },
-    { static_cast<int>(SdkComponentType::LEG_R), 5, 3,  0.0f,   0.0f, 0.0f,  60.0f, 0.8f },
+    // 右腿前伸验证姿态。与左腿同号，因为左右髋/膝/踝俯仰轴方向一致。
+    { static_cast<int>(SdkComponentType::LEG_R), 0, 3, -0.35f,  0.0f, 0.0f, 160.0f, 6.0f },  // 髋俯仰：从站立 -0.10 小幅前伸
+    { static_cast<int>(SdkComponentType::LEG_R), 1, 3,  0.0f,   0.0f, 0.0f, 160.0f, 6.0f },  // 髋横滚：保持站立
+    { static_cast<int>(SdkComponentType::LEG_R), 2, 3,  0.0f,   0.0f, 0.0f, 160.0f, 6.0f },  // 髋偏航：保持站立
+    { static_cast<int>(SdkComponentType::LEG_R), 3, 3,  0.35f,  0.0f, 0.0f, 160.0f, 6.0f },  // 膝：轻微屈膝，给前伸留余量
+    { static_cast<int>(SdkComponentType::LEG_R), 4, 3, -0.22f,  0.0f, 0.0f,  60.0f, 0.8f },  // 踝俯仰：配合髋/膝，保持脚姿态温和变化
+    { static_cast<int>(SdkComponentType::LEG_R), 5, 3,  0.0f,   0.0f, 0.0f,  60.0f, 0.8f },  // 踝横滚：保持站立
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -208,7 +213,27 @@ static const char* state_name(int8_t s) {
         case 6:  return "ST_MIMIC";
         case 11: return "RL_NAV";
         case 12: return "RL_WALK_AMP";
+        case 20: return "BY_MIMIC";
+        case 21: return "BFM_MIMIC";
         default: return "UNKNOWN";
+    }
+}
+
+static bool is_main_robot_state(int state) {
+    switch (state) {
+        case 0:   // NOT_A_STATE
+        case static_cast<int>(SdkStateType::RESET):
+        case static_cast<int>(SdkStateType::STAND):
+        case static_cast<int>(SdkStateType::RL_WALK):
+        case static_cast<int>(SdkStateType::RL_LIEDOWN):
+        case static_cast<int>(SdkStateType::RL_MIMIC):
+        case static_cast<int>(SdkStateType::RL_NAV):
+        case static_cast<int>(SdkStateType::RL_WALK_AMP):
+        case static_cast<int>(SdkStateType::BY_MIMIC):
+        case static_cast<int>(SdkStateType::BFM_MIMIC):
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -220,6 +245,15 @@ static std::atomic<bool> g_got_status{false};
 static std::atomic<int> g_imu_count{0};
 
 static void on_robot_status(const robot_status_lcmt* msg) {
+    if (!is_main_robot_state(msg->state)) {
+        // lcm_robot_status 也承载语音、电量、手臂动作等通知；这些不是主状态机状态，
+        // 不能覆盖 g_robot_state，否则 wait_state(STAND/RESET) 会被 UNKNOWN 污染。
+        LOG_EVERY_N(WARNING, 50) << "Ignore non-main robot_status state="
+                                 << static_cast<int>(msg->state)
+                                 << ", type=" << static_cast<int>(msg->type)
+                                 << ", audio_file='" << msg->audio_file << "'";
+        return;
+    }
     g_robot_state = msg->state;
     g_got_status = true;
 }
@@ -240,8 +274,24 @@ static bool wait_state(int target, int timeout_s) {
         }
     }
     LOG(ERROR) << "Timeout waiting for " << state_name((int8_t)target)
-               << ", current=" << state_name((int8_t)g_robot_state.load());
+               << ", current=" << state_name((int8_t)g_robot_state.load())
+               << "(" << g_robot_state.load() << ")";
     return false;
+}
+
+static void ensure_reset_briefly(SdkRobotManager& manager) {
+    if (g_robot_state.load() == static_cast<int>(SdkStateType::RESET)) {
+        LOG(INFO) << "Robot is already RESET; skip RESET command.";
+        return;
+    }
+
+    LOG(INFO) << "Robot is not reported as RESET"
+              << (g_got_status.load() ? "" : " (no robot_status received yet)")
+              << ", send RESET and wait 3s. current="
+              << state_name((int8_t)g_robot_state.load())
+              << "(" << g_robot_state.load() << ")";
+    manager.SendRobotCmd(SdkStateType::RESET);
+    sleep(3);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -302,9 +352,7 @@ int main(int argc, char* argv[]) {
     // ── RESET ─────────────────────────────────────────────────────
     LOG(INFO) << "=== Step 1: RESET ===";
     if (!g_running) goto cleanup;
-    manager.SendRobotCmd(SdkStateType::RESET);
-    if (!wait_state(1, 15)) goto cleanup;
-    sleep(3);
+    ensure_reset_briefly(manager);
 
     // ── STAND ─────────────────────────────────────────────────────
     LOG(INFO) << "=== Step 2: STAND ===";
