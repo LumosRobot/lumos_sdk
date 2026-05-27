@@ -333,6 +333,7 @@ int main(int argc, char* argv[]) {
     if (!wait_state(2, 15)) goto save;
     sleep(3);
 
+    /*
     // ================================================================
     // Step 4: RL_WALK — walk and collect data
     // ================================================================
@@ -341,6 +342,7 @@ int main(int argc, char* argv[]) {
     manager.SendRobotCmd(SdkStateType::RL_WALK, 0.1f);
     if (!wait_state(3, 10)) goto save;
 
+    
     // Walk 10 seconds, collecting data
     for (int t = 0; t < 10 && g_running; t++) {
         // Safety: if robot fell out of RL_WALK, stop sending walk commands
@@ -355,7 +357,9 @@ int main(int argc, char* argv[]) {
     }
     manager.SendRobotCmd(SdkStateType::RL_WALK, 0.0f);
     sleep(2);
+    */
 
+    /*
     // ================================================================
     // Step 5: BY_MIMIC — dance #2 (policy_type=2)
     // RL_WALK → RESET → STAND → BY_MIMIC
@@ -368,9 +372,11 @@ int main(int argc, char* argv[]) {
     manager.SendRobotCmd(SdkStateType::STAND);
     if (!wait_state(2, 15)) goto save;
     sleep(2);
-    // manager.SendRobotCmd(SdkStateType::BY_MIMIC, 0, 0, 0, 2); // 修改舞蹈在这里设置！！！
+    manager.SendRobotCmd(SdkStateType::BY_MIMIC, 0, 0, 0, 2); // 修改舞蹈在这里设置！！！
     // After entering MIMIC, the robot stays in that state until we switch out
     sleep(10);
+    */
+
 
     // ================================================================
     // Step 6: STAND
