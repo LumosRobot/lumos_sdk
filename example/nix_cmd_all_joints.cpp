@@ -1,15 +1,17 @@
 #include "sdk_robot_manager.hpp"
 #include <unistd.h>
-#include <iostream>
-#include <iomanip>
-#include <sstream>
 #include <csignal>
 #include <atomic>
 #include <chrono>
 #include <thread>
 #include <mutex>
 #include <map>
+#include <string>
 #include <vector>
+#include <array>
+#include <fstream>
+#include <cstring>
+#include <cstdlib>
 #include <glog/logging.h>
 
 /**
@@ -20,9 +22,9 @@
  *           CONTROL_COMPONENT XXX  — 指定肢体 (ARM_L / ARM_R / WAIST / LEG_L / LEG_R)
  *           CONTROL_SINGLE  <idx>  — 指定单关节 (0-20, 全局索引见下方注释)
  *
- *         下发模式（二选一）:
- *           MODE_ONESHOT    — 测试: 进入 STAND → 下发一次目标位置 → 保持至 Ctrl-C
- *           MODE_CONTINUOUS — 正式: 进入 STAND → 循环持续下发 (200 Hz)
+ *         下发模式:
+ *           MODE_ONESHOT    — 非回放测试: 进入 STAND → 下发一次目标位置 → 保持至 Ctrl-C
+ *           CONTROL_REPLAY  — 策略轨迹: 按 argv[1] 指定遍数循环回放 (默认 1 遍，<=0 无限)
  *
  *         操作流程:
  *           1. 机器人运行 lumos_controller，SDK 程序负责切换 SDK 模式
@@ -41,31 +43,54 @@
  */
 
 // ═══════════════════════════════════════════════════════════════════
-// 控制范围 — 三选一，只保留一个不注释的
+// 控制范围 — 四选一，只保留一个不注释的
 // ═══════════════════════════════════════════════════════════════════
-//#define CONTROL_ALL
-#define CONTROL_COMPONENT static_cast<int>(SdkComponentType::LEG_R)  // ARM_L | ARM_R | WAIST | LEG_L | LEG_R
+// 使用示例的数据控制
+//#define CONTROL_ALL          
+//#define CONTROL_COMPONENT static_cast<int>(SdkComponentType::LEG_R) // ARM_L | ARM_R | WAIST | LEG_L | LEG_R
 //#define CONTROL_SINGLE  8          // 全局索引: 8 = WAIST 腰
 
-// ═══════════════════════════════════════════════════════════════════
-// 下发模式 — 二选一
-// ═══════════════════════════════════════════════════════════════════
-#define MODE_ONESHOT
-//#define MODE_CONTINUOUS
+// 使用策略的数据控制
+#define CONTROL_REPLAY             // 轨迹回放: 读取 store_ref_motion.txt + kp_kd.yaml
+
+// 非 CONTROL_REPLAY 模式下使用；CONTROL_REPLAY 通过命令行参数控制回放遍数。
+// #define MODE_ONESHOT
+
+#if (defined(CONTROL_ALL) + defined(CONTROL_COMPONENT) + defined(CONTROL_SINGLE) + defined(CONTROL_REPLAY)) != 1
+#error "Define exactly one control source: CONTROL_ALL, CONTROL_COMPONENT, CONTROL_SINGLE, or CONTROL_REPLAY."
+#endif
+
+#ifdef MODE_CONTINUOUS
+#error "MODE_CONTINUOUS has been removed. CONTROL_REPLAY loops continuously by frame count; non-replay modes use MODE_ONESHOT."
+#endif
+
+#ifdef CONTROL_REPLAY
+#ifdef MODE_ONESHOT
+#error "CONTROL_REPLAY does not use MODE_ONESHOT. Use argv[1] to set replay loop count."
+#endif
+#else
+#ifndef MODE_ONESHOT
+#error "Non-replay control requires MODE_ONESHOT."
+#endif
+#endif
 
 // ── 常量 ─────────────────────────────────────────────────────────
-static constexpr int    kControlHz        = 200;
-static constexpr int    kTotalJoints      = 21;
-static constexpr int    kArmJointsPerSide = 4;
-static constexpr int    kLegJointsPerSide = 6;
-static constexpr int    kWaistJoints      = 1;
+static constexpr int    kControlHz        = 100;    // 控制频率 (Hz) 
+static constexpr int    kTotalJoints      = 21;     // NIX2 关节总数
 static constexpr float  kControlDt        = 1.0f / kControlHz;
 static constexpr float  kRampDuration     = 2.0f;   // 插值时间 (秒)
 static constexpr int    kStandSettleSec   = 11;     // controller StandState 插值约 10s，留 1s 余量
+static constexpr int    kReplayFieldNum   = 45;     // store_ref_motion.txt 每帧列数
+static constexpr int    kDefaultReplayLoops = 1;    // <=0 表示无限循环，直到 Ctrl-C
+
+// ── 轨迹回放文件路径（相对于 models/nix2_policy/<policy_name>/）─
+static const char* kReplayPolicyDir  = "../models/nix2_policy/sanlin_04101426";
+static const char* kReplayMotionFile = "store_ref_motion.txt";
+static const char* kReplayKpKdFile   = "kp_kd.yaml";
 
 // ── 全局 ─────────────────────────────────────────────────────────
-static volatile bool g_running = true;
-static void sigint_handler(int) { g_running = false; }
+static volatile std::sig_atomic_t g_running = 1;
+static void sigint_handler(int) { g_running = 0; }
 
 // ── 实时关节位置缓存 (component_type,joint_id) → pos_high ──────
 static std::mutex g_jpos_mutex;
@@ -181,6 +206,10 @@ static std::vector<SdkJointCmd> build_target_cmds() {
     XX(LEG_R,  g_leg_r)
     #undef XX
 
+#elif defined(CONTROL_REPLAY)
+    // 轨迹回放模式不使用 build_target_cmds，在 main() 中独立处理
+    return cmds;  // empty
+
 #elif defined(CONTROL_SINGLE)
     // CONTROL_SINGLE 定义为全局索引 0-20
     static JointTarget* all_joints[kTotalJoints] = {
@@ -210,7 +239,7 @@ static const char* state_name(int8_t s) {
         case 2:  return "STAND";
         case 3:  return "RL_WALK";
         case 5:  return "RL_LIEDOWN";
-        case 6:  return "ST_MIMIC";
+        case 6:  return "RL_MIMIC";
         case 11: return "RL_NAV";
         case 12: return "RL_WALK_AMP";
         case 20: return "BY_MIMIC";
@@ -295,24 +324,153 @@ static void ensure_reset_briefly(SdkRobotManager& manager) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 打印当前关节目标
+// 轨迹回放 (CONTROL_REPLAY) — 辅助数据结构与函数
 // ═══════════════════════════════════════════════════════════════════
-static void print_cmds(const std::vector<SdkJointCmd>& cmds) {
-    std::ostringstream oss;
-    oss << "Sending " << cmds.size() << " joint(s):\n";
-    for (auto& c : cmds) {
-        oss << "  comp=" << (int)c.component_type
-            << " jid="  << (int)c.joint_id
-            << " ctrl=" << (int)c.ctrlWord
-            << " pos="  << std::fixed << std::setprecision(3) << c.tarPos
-            << " vel="  << c.tarVel
-            << " tor="  << c.tarTor
-            << " kp="   << c.res1
-            << " kd="   << c.res2
-            << "\n";
+
+struct ReplayJointDesc {
+    int component_type;   // SdkComponentType 整数值
+    int joint_id;         // 组件内索引
+    int txt_col;          // store_ref_motion.txt 中 dof_pos 的列号 (0-44)
+};
+
+// 21 关节映射表，按 robot_joint_names 顺序 = SDK 下发顺序 =
+// LEG_L(6) → LEG_R(6) → WAIST(1) → ARM_L(4) → ARM_R(4)
+static const ReplayJointDesc kReplayMapping[21] = {
+    // LEG_L (kp/kd idx 0-5)
+    {static_cast<int>(SdkComponentType::LEG_L), 0, 12},  // left_hip_pitch
+    {static_cast<int>(SdkComponentType::LEG_L), 1, 16},  // left_hip_roll
+    {static_cast<int>(SdkComponentType::LEG_L), 2, 14},  // left_hip_yaw
+    {static_cast<int>(SdkComponentType::LEG_L), 3, 18},  // left_knee
+    {static_cast<int>(SdkComponentType::LEG_L), 4, 20},  // left_ankle_pitch
+    {static_cast<int>(SdkComponentType::LEG_L), 5, 22},  // left_ankle_roll
+    // LEG_R (kp/kd idx 6-11)
+    {static_cast<int>(SdkComponentType::LEG_R), 0, 13},  // right_hip_pitch
+    {static_cast<int>(SdkComponentType::LEG_R), 1, 17},  // right_hip_roll
+    {static_cast<int>(SdkComponentType::LEG_R), 2, 15},  // right_hip_yaw
+    {static_cast<int>(SdkComponentType::LEG_R), 3, 19},  // right_knee
+    {static_cast<int>(SdkComponentType::LEG_R), 4, 21},  // right_ankle_pitch
+    {static_cast<int>(SdkComponentType::LEG_R), 5, 23},  // right_ankle_roll
+    // WAIST (kp/kd idx 12)
+    {static_cast<int>(SdkComponentType::WAIST), 0, 3},   // torso_joint
+    // ARM_L (kp/kd idx 13-16)
+    {static_cast<int>(SdkComponentType::ARM_L), 0, 4},   // left_shoulder_pitch
+    {static_cast<int>(SdkComponentType::ARM_L), 1, 6},   // left_shoulder_roll
+    {static_cast<int>(SdkComponentType::ARM_L), 2, 8},   // left_shoulder_yaw
+    {static_cast<int>(SdkComponentType::ARM_L), 3, 10},  // left_elbow
+    // ARM_R (kp/kd idx 17-20)
+    {static_cast<int>(SdkComponentType::ARM_R), 0, 5},   // right_shoulder_pitch
+    {static_cast<int>(SdkComponentType::ARM_R), 1, 7},   // right_shoulder_roll
+    {static_cast<int>(SdkComponentType::ARM_R), 2, 9},   // right_shoulder_yaw
+    {static_cast<int>(SdkComponentType::ARM_R), 3, 11},  // right_elbow
+};
+
+// 轻量 YAML 解析：只针对 kp_kd.yaml 格式，读取 kps[21]/kds[21]
+static bool parseKpKdYaml(const std::string& path, float kp[21], float kd[21]) {
+    std::ifstream fin(path);
+    if (!fin.is_open()) {
+        LOG(ERROR) << "Cannot open kp_kd.yaml: " << path;
+        return false;
     }
-    LOG(INFO) << oss.str();
+    int ki = 0, di = 0;
+    bool in_kps = false, in_kds = false;
+    std::string line;
+    while (std::getline(fin, line)) {
+        // trim leading whitespace
+        const char* s = line.c_str();
+        while (*s == ' ' || *s == '\t') ++s;
+
+        if (strncmp(s, "kps:", 4) == 0)  { in_kps = true; in_kds = false; continue; }
+        if (strncmp(s, "kds:", 4) == 0)  { in_kds = true; in_kps = false; continue; }
+        if (strncmp(s, "scales:", 7) == 0) { in_kps = false; in_kds = false; continue; }
+
+        if (in_kps || in_kds) {
+            // stop when hitting next section or empty after a list
+            if (s[0] != '-' && *s != '\0' && s[0] != '#') {
+                in_kps = false;
+                in_kds = false;
+                continue;
+            }
+            if (s[0] == '-') {
+                const char* val = s + 1;
+                while (*val == ' ') ++val;
+                float f = std::strtof(val, nullptr);
+                if (in_kps && ki < 21) kp[ki++] = f;
+                if (in_kds && di < 21) kd[di++] = f;
+                continue;
+            }
+        }
+    }
+    if (ki != 21 || di != 21) {
+        LOG(ERROR) << "Invalid kp_kd.yaml counts: kps=" << ki << ", kds=" << di
+                   << ", expected 21 each. path=" << path;
+        return false;
+    }
+    return true;
 }
+
+// 读取 store_ref_motion.txt，每行 45 个 float
+static std::vector<std::array<float, kReplayFieldNum>> loadRefMotion(const std::string& path) {
+    std::vector<std::array<float, kReplayFieldNum>> frames;
+    std::ifstream fin(path);
+    if (!fin.is_open()) {
+        LOG(ERROR) << "Cannot open motion file: " << path;
+        return frames;
+    }
+    std::string line;
+    while (std::getline(fin, line)) {
+        if (line.empty()) continue;
+        std::array<float, kReplayFieldNum> row{};
+        const char* p = line.c_str();
+        char* end = nullptr;
+        for (int i = 0; i < kReplayFieldNum; ++i) {
+            row[i] = std::strtof(p, &end);
+            p = end;
+        }
+        frames.push_back(row);
+    }
+    LOG(INFO) << "Loaded " << frames.size() << " frames from " << path;
+    return frames;
+}
+
+static bool parseReplayLoops(int argc, char* argv[], int& loops) {
+    loops = kDefaultReplayLoops;
+    if (argc < 2) {
+        return true;
+    }
+
+    char* end = nullptr;
+    long value = std::strtol(argv[1], &end, 10);
+    if (end == argv[1] || *end != '\0') {
+        LOG(ERROR) << "Invalid replay loop count: '" << argv[1]
+                   << "'. Use a positive integer, or <=0 for infinite replay.";
+        return false;
+    }
+
+    loops = static_cast<int>(value);
+    return true;
+}
+
+// 从一帧 ref_motion 构建 21 个 SdkJointCmd
+static std::vector<SdkJointCmd> buildReplayCmds(
+        const std::array<float, kReplayFieldNum>& frame,
+        const float kp[21], const float kd[21]) {
+    std::vector<SdkJointCmd> cmds;
+    cmds.reserve(21);
+    for (int i = 0; i < 21; ++i) {
+        SdkJointCmd cmd;
+        cmd.component_type = kReplayMapping[i].component_type;
+        cmd.joint_id       = kReplayMapping[i].joint_id;
+        cmd.ctrlWord       = 3;
+        cmd.tarPos         = frame[kReplayMapping[i].txt_col];
+        cmd.tarVel         = 0.0f;
+        cmd.tarTor         = 0.0f;
+        cmd.res1           = kp[i];
+        cmd.res2           = kd[i];
+        cmds.push_back(cmd);
+    }
+    return cmds;
+}
+
 
 // ═══════════════════════════════════════════════════════════════════
 int main(int argc, char* argv[]) {
@@ -331,13 +489,28 @@ int main(int argc, char* argv[]) {
     manager.SetImuDataCb(on_imu_data);
     manager.SetJointDataCb(on_joint_data);
 
+    bool sdk_mode_entered = false;
+
+#ifndef CONTROL_REPLAY
     // 构建目标指令（由编译期宏选择 CONTROL_ALL/COMPONENT/SINGLE）
     auto cmds = build_target_cmds();
     if (cmds.empty()) {
         LOG(ERROR) << "No joints selected — check CONTROL_xxx macro.";
         return 1;
     }
-    print_cmds(cmds);
+#endif
+
+#ifdef CONTROL_REPLAY
+    std::string motion_path;
+    std::string kpkd_path;
+    float replay_kp[21] = {};
+    float replay_kd[21] = {};
+    std::vector<std::array<float, kReplayFieldNum>> replay_frames;
+    int replay_loops = kDefaultReplayLoops;
+    if (!parseReplayLoops(argc, argv, replay_loops)) {
+        return 1;
+    }
+#endif
 
     // 检查 LCM 是否通（IMU 高频发布，比 robot_status 更可靠）
     LOG(INFO) << "Waiting for LCM data (checking IMU)...";
@@ -351,33 +524,97 @@ int main(int argc, char* argv[]) {
 
     // ── RESET ─────────────────────────────────────────────────────
     LOG(INFO) << "=== Step 1: RESET ===";
-    if (!g_running) goto cleanup;
+    if (!g_running) {
+        exit_code = 1;
+        goto cleanup;
+    }
     ensure_reset_briefly(manager);
 
     // ── STAND ─────────────────────────────────────────────────────
     LOG(INFO) << "=== Step 2: STAND ===";
-    if (!g_running) goto cleanup;
+    if (!g_running) {
+        exit_code = 1;
+        goto cleanup;
+    }
     manager.SendRobotCmd(SdkStateType::STAND);
-    if (!wait_state(2, 15)) goto cleanup;
+    if (!wait_state(2, 15)) {
+        exit_code = 1;
+        goto cleanup;
+    }
     LOG(INFO) << "STAND state reported. Waiting " << kStandSettleSec
               << "s for stand interpolation to finish before SDK joint control.";
     for (int i = 0; i < kStandSettleSec && g_running; ++i) {
         sleep(1);
     }
-    if (!g_running) goto cleanup;
+    if (!g_running) {
+        exit_code = 1;
+        goto cleanup;
+    }
 
     // ── 进入 SDK 模式 ─────────────────────────────────────────────
     // controller 端只允许在 STAND/RESET 状态，或手柄已授权 SDK 模式时接受
     // sdk_lcm_set_type_cmd。这里放在 STAND 成功之后，避免启动初期被拒绝。
     LOG(INFO) << "=== Step 3: Enter SDK mode ===";
-    if (!g_running) goto cleanup;
+    if (!g_running) {
+        exit_code = 1;
+        goto cleanup;
+    }
     manager.SendModeCmd(1);
+    sdk_mode_entered = true;
     sleep(1);
+
+#ifdef CONTROL_REPLAY
+    // ── 加载轨迹回放文件 ──────────────────────────────────────
+    motion_path = std::string(kReplayPolicyDir) + "/" + kReplayMotionFile;
+    kpkd_path   = std::string(kReplayPolicyDir) + "/" + kReplayKpKdFile;
+
+    if (!parseKpKdYaml(kpkd_path, replay_kp, replay_kd)) {
+        LOG(ERROR) << "Failed to load kp_kd.yaml";
+        exit_code = 1;
+        goto cleanup;
+    }
+    LOG(INFO) << "Loaded kp_kd.yaml: " << kpkd_path;
+
+    replay_frames = loadRefMotion(motion_path);
+    if (replay_frames.empty()) {
+        LOG(ERROR) << "No frames loaded from " << motion_path;
+        exit_code = 1;
+        goto cleanup;
+    }
+#endif
 
     // ── 下发关节指令 ──────────────────────────────────────────────
     LOG(INFO) << "=== Step 4: Send joint commands ===";
 
-#ifdef MODE_ONESHOT
+#ifdef CONTROL_REPLAY
+    LOG(INFO) << "Replay mode: " << replay_frames.size() << " frames at "
+              << kControlHz << " Hz, loops="
+              << (replay_loops > 0 ? std::to_string(replay_loops) : std::string("infinite"))
+              << ". Press Ctrl-C to stop.";
+    {
+        size_t frame_idx = 0;
+        int completed_loops = 0;
+        auto next_tick = std::chrono::steady_clock::now();
+        while (g_running && (replay_loops <= 0 || completed_loops < replay_loops)) {
+            auto replay_cmds = buildReplayCmds(replay_frames[frame_idx], replay_kp, replay_kd);
+            manager.SendJointCmds(replay_cmds);
+
+            frame_idx = (frame_idx + 1) % replay_frames.size();
+            if (frame_idx == 0) {
+                ++completed_loops;
+                LOG(INFO) << "Replay loop " << completed_loops << " complete.";
+            }
+            next_tick += std::chrono::microseconds(static_cast<int>(kControlDt * 1e6f));
+            auto now = std::chrono::steady_clock::now();
+            if (next_tick > now) {
+                std::this_thread::sleep_until(next_tick);
+            } else {
+                next_tick = now;
+            }
+        }
+    }
+
+#elif defined(MODE_ONESHOT)
     // ── 从当前实际位置平滑插值到目标位置 ──────────────────────
     {
         // 拷贝目标值到可变数组，后续每帧覆盖 tarPos
@@ -425,28 +662,19 @@ int main(int argc, char* argv[]) {
     manager.SendJointCmds(cmds);  // 精确到达目标
     while (g_running) { usleep(100000); }
 
-#elif defined(MODE_CONTINUOUS)
-    LOG(INFO) << "Continuous loop at " << kControlHz << " Hz. Press Ctrl-C to stop.";
-    auto next_tick = std::chrono::steady_clock::now();
-    while (g_running) {
-        manager.SendJointCmds(cmds);
-        next_tick += std::chrono::microseconds(static_cast<int>(kControlDt * 1e6f));
-        auto now = std::chrono::steady_clock::now();
-        if (next_tick > now) {
-            std::this_thread::sleep_until(next_tick);
-        } else {
-            // 掉帧，重新对齐
-            next_tick = now;
-        }
-    }
 #endif
 
     // ── 恢复 ──────────────────────────────────────────────────────
+    if (!g_running) {
+        exit_code = 1;
+        goto cleanup;
+    }
     LOG(INFO) << "=== Step 5: Return to safe state ===";
     manager.SendRobotCmd(SdkStateType::RESET);
     wait_state(1, 10);
     sleep(3);
     manager.SendModeCmd(0);
+    sdk_mode_entered = false;
     sleep(1);
 
 cleanup:
@@ -457,6 +685,11 @@ cleanup:
         manager.SendRobotCmd(SdkStateType::RESET);
         sleep(3);
         manager.SendModeCmd(0);
+        sdk_mode_entered = false;
+    } else if (sdk_mode_entered) {
+        LOG(WARNING) << "Leaving SDK mode after early exit...";
+        manager.SendModeCmd(0);
+        sleep(1);
     }
     google::ShutdownGoogleLogging();
     return g_running ? exit_code : 1;
