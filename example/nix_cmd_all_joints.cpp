@@ -15,45 +15,59 @@
 #include <glog/logging.h>
 
 /**
- * @brief   NIX2 SDK 关节级控制 — 支持单关节 / 单肢体 / 全身控制
+ * @brief   NIX2 SDK 关节级控制示例 / 策略轨迹回放工具
  *
- *         控制范围（三选一，取消注释对应的宏）:
- *           CONTROL_ALL            — 全身 21 关节
- *           CONTROL_COMPONENT XXX  — 指定肢体 (ARM_L / ARM_R / WAIST / LEG_L / LEG_R)
- *           CONTROL_SINGLE  <idx>  — 指定单关节 (0-20, 全局索引见下方注释)
+ *         控制源（四选一，只能保留一个宏）:
+ *           CONTROL_ALL            — 使用本文件示例目标值，控制全身 21 关节
+ *           CONTROL_COMPONENT XXX  — 使用本文件示例目标值，控制指定组件
+ *                                    (ARM_L / ARM_R / WAIST / LEG_L / LEG_R)
+ *           CONTROL_SINGLE  <idx>  — 使用本文件示例目标值，控制单个全局索引关节
+ *           CONTROL_REPLAY         — 读取 store_ref_motion.txt + kp_kd.yaml，
+ *                                    按策略轨迹连续下发 21 个关节目标
  *
  *         下发模式:
- *           MODE_ONESHOT    — 非回放测试: 进入 STAND → 下发一次目标位置 → 保持至 Ctrl-C
- *           CONTROL_REPLAY  — 策略轨迹: 按 argv[1] 指定遍数循环回放 (默认 1 遍，<=0 无限)
+ *           非回放控制源必须启用 MODE_ONESHOT:
+ *             进入 STAND → 从当前关节位置插值到示例目标值 → 保持至 Ctrl-C
+ *           CONTROL_REPLAY 不使用 MODE_ONESHOT / MODE_CONTINUOUS:
+ *             argv[1] 指定回放遍数，默认 1 遍；<=0 表示无限循环直到 Ctrl-C
  *
  *         操作流程:
- *           1. 机器人运行 lumos_controller，SDK 程序负责切换 SDK 模式
- *           2. 本地运行: ./build/nix_cmd_all_joints
- *           3. Ctrl-C 安全退出 (自动 RESET)
+ *           1. 机器人端运行 lumos_controller
+ *           2. 可选: 先运行 ./nix_recv_all_data 纯监听记录数据
+ *           3. 本地 build 目录运行:
+ *                ./nix_cmd_all_joints      # 默认回放 1 遍
+ *                ./nix_cmd_all_joints 3    # 回放 3 遍
+ *                ./nix_cmd_all_joints 0    # 无限回放，Ctrl-C 停止
+ *           4. 本程序负责进入/退出 SDK 模式；其他监听程序不要发送 SendModeCmd
  *
- *         全局关节索引 (NIX2, 21 关节):
- *           0-3:   ARM_L  [肩俯仰, 肩横滚, 肩偏航, 肘]
- *           4-7:   ARM_R  [肩俯仰, 肩横滚, 肩偏航, 肘]
- *           8:     WAIST  [腰]
- *           9-14:  LEG_L  [髋俯仰, 髋横滚, 髋偏航, 膝, 踝俯仰, 踝横滚]
- *           15-20: LEG_R  [髋俯仰, 髋横滚, 髋偏航, 膝, 踝俯仰, 踝横滚]
+ *         全局关节索引 / SDK 下发顺序 (NIX2, 21 关节):
+ *           0-5:   LEG_L  [髋俯仰, 髋横滚, 髋偏航, 膝, 踝俯仰, 踝横滚]
+ *           6-11:  LEG_R  [髋俯仰, 髋横滚, 髋偏航, 膝, 踝俯仰, 踝横滚]
+ *           12:    WAIST  [腰]
+ *           13-16: ARM_L  [肩俯仰, 肩横滚, 肩偏航, 肘]
+ *           17-20: ARM_R  [肩俯仰, 肩横滚, 肩偏航, 肘]
+ *
+ *         注意:
+ *           - MODE_CONTINUOUS 已移除；回放是否循环由 argv[1] 控制。
+ *           - CONTROL_REPLAY 的 store_ref_motion.txt 列顺序来自 ref_motion_fields.yaml，
+ *             下发前通过 kReplayMapping 重排为 SDK 组件顺序。
  *
  * @author  jiangbin
  * @date    2026-05-26
  */
 
 // ═══════════════════════════════════════════════════════════════════
-// 控制范围 — 四选一，只保留一个不注释的
+// 控制源 — 四选一，只保留一个不注释的
 // ═══════════════════════════════════════════════════════════════════
-// 使用示例的数据控制
+// 示例目标控制：使用下方 g_leg_l/g_arm_l/... 数组里的固定目标值。
 //#define CONTROL_ALL          
 //#define CONTROL_COMPONENT static_cast<int>(SdkComponentType::LEG_R) // ARM_L | ARM_R | WAIST | LEG_L | LEG_R
-//#define CONTROL_SINGLE  8          // 全局索引: 8 = WAIST 腰
+//#define CONTROL_SINGLE  12         // 全局索引: 12 = WAIST 腰
 
-// 使用策略的数据控制
-#define CONTROL_REPLAY             // 轨迹回放: 读取 store_ref_motion.txt + kp_kd.yaml
+// 策略轨迹回放：读取 store_ref_motion.txt + kp_kd.yaml，按 argv[1] 指定遍数回放。
+#define CONTROL_REPLAY
 
-// 非 CONTROL_REPLAY 模式下使用；CONTROL_REPLAY 通过命令行参数控制回放遍数。
+// 仅非 CONTROL_REPLAY 控制源使用；CONTROL_REPLAY 不要打开这个宏。
 // #define MODE_ONESHOT
 
 #if (defined(CONTROL_ALL) + defined(CONTROL_COMPONENT) + defined(CONTROL_SINGLE) + defined(CONTROL_REPLAY)) != 1
@@ -83,7 +97,7 @@ static constexpr int    kStandSettleSec   = 11;     // controller StandState 插
 static constexpr int    kReplayFieldNum   = 45;     // store_ref_motion.txt 每帧列数
 static constexpr int    kDefaultReplayLoops = 1;    // <=0 表示无限循环，直到 Ctrl-C
 
-// ── 轨迹回放文件路径（相对于 models/nix2_policy/<policy_name>/）─
+// ── 轨迹回放文件路径（程序从 build/ 目录运行，所以这里相对 build/）─
 static const char* kReplayPolicyDir  = "../models/nix2_policy/sanlin_04101426";
 static const char* kReplayMotionFile = "store_ref_motion.txt";
 static const char* kReplayKpKdFile   = "kp_kd.yaml";
@@ -119,7 +133,7 @@ struct JointTarget {
     float kd;               // 阻尼 (Nm·s/rad)
 };
 
-// --- ARM_L (全局索引 0-3) ------------------------------------------
+// --- ARM_L (全局索引 13-16) -----------------------------------------
 static JointTarget g_arm_l[4] = {
     // component_type, joint_id, ctrlWord, tarPos, tarVel, tarTor, kp,  kd
     // 左臂前伸验证姿态。幅度保守，先用于确认单肢体覆盖链路；如方向相反，
@@ -130,7 +144,7 @@ static JointTarget g_arm_l[4] = {
     { static_cast<int>(SdkComponentType::ARM_L), 3, 3, -0.45f,  0.0f, 0.0f, 120.0f, 5.0f },  // 肘：轻微弯曲，避免完全伸直
 };
 
-// --- ARM_R (全局索引 4-7) ------------------------------------------
+// --- ARM_R (全局索引 17-20) -----------------------------------------
 static JointTarget g_arm_r[4] = {
     // 右臂前伸验证姿态。肩俯仰与左臂同号；横滚/偏航按左右镜像取相反号。
     { static_cast<int>(SdkComponentType::ARM_R), 0, 3, -0.35f,  0.0f, 0.0f, 120.0f, 5.0f },  // 肩俯仰：前伸主关节
@@ -139,13 +153,13 @@ static JointTarget g_arm_r[4] = {
     { static_cast<int>(SdkComponentType::ARM_R), 3, 3, -0.45f,  0.0f, 0.0f, 120.0f, 5.0f },  // 肘：轻微弯曲，避免完全伸直
 };
 
-// --- WAIST (全局索引 8) ---------------------------------------------
+// --- WAIST (全局索引 12) --------------------------------------------
 static JointTarget g_waist[1] = {
     // 默认单关节测试给腰一个小角度，便于确认 SDK 指令确实覆盖了 stand 状态命令。
     { static_cast<int>(SdkComponentType::WAIST), 0, 3,  0.30f,  0.0f, 0.0f, 160.0f, 6.0f },
 };
 
-// --- LEG_L (全局索引 9-14) -----------------------------------------
+// --- LEG_L (全局索引 0-5) -------------------------------------------
 static JointTarget g_leg_l[6] = {
     // 左腿前伸验证姿态。只改矢状面三个关节，横滚/偏航保持站立值，降低侧向失稳风险。
     { static_cast<int>(SdkComponentType::LEG_L), 0, 3, -0.35f,  0.0f, 0.0f, 160.0f, 6.0f },  // 髋俯仰：从站立 -0.10 小幅前伸
@@ -156,7 +170,7 @@ static JointTarget g_leg_l[6] = {
     { static_cast<int>(SdkComponentType::LEG_L), 5, 3,  0.0f,   0.0f, 0.0f,  60.0f, 0.8f },  // 踝横滚：保持站立
 };
 
-// --- LEG_R (全局索引 15-20) ----------------------------------------
+// --- LEG_R (全局索引 6-11) ------------------------------------------
 static JointTarget g_leg_r[6] = {
     // 右腿前伸验证姿态。与左腿同号，因为左右髋/膝/踝俯仰轴方向一致。
     { static_cast<int>(SdkComponentType::LEG_R), 0, 3, -0.35f,  0.0f, 0.0f, 160.0f, 6.0f },  // 髋俯仰：从站立 -0.10 小幅前伸
@@ -190,11 +204,12 @@ static std::vector<SdkJointCmd> build_target_cmds() {
     std::vector<SdkJointCmd> cmds;
 
 #if defined(CONTROL_ALL)
-    for (auto& j : g_arm_l)  cmds.push_back(make_cmd(j));
-    for (auto& j : g_arm_r)  cmds.push_back(make_cmd(j));
-    for (auto& j : g_waist)  cmds.push_back(make_cmd(j));
+    // 全身示例目标按 controller robot_joint_names / SDK 下发顺序组装。
     for (auto& j : g_leg_l)  cmds.push_back(make_cmd(j));
     for (auto& j : g_leg_r)  cmds.push_back(make_cmd(j));
+    for (auto& j : g_waist)  cmds.push_back(make_cmd(j));
+    for (auto& j : g_arm_l)  cmds.push_back(make_cmd(j));
+    for (auto& j : g_arm_r)  cmds.push_back(make_cmd(j));
 
 #elif defined(CONTROL_COMPONENT)
     // CONTROL_COMPONENT 定义为 SdkComponentType 的整数值。
@@ -208,16 +223,16 @@ static std::vector<SdkJointCmd> build_target_cmds() {
 
 #elif defined(CONTROL_REPLAY)
     // 轨迹回放模式不使用 build_target_cmds，在 main() 中独立处理
-    return cmds;  // empty
+    return cmds;  // 返回空列表，避免和示例目标控制混用
 
 #elif defined(CONTROL_SINGLE)
     // CONTROL_SINGLE 定义为全局索引 0-20
     static JointTarget* all_joints[kTotalJoints] = {
-        &g_arm_l[0], &g_arm_l[1], &g_arm_l[2], &g_arm_l[3],       // 0-3
-        &g_arm_r[0], &g_arm_r[1], &g_arm_r[2], &g_arm_r[3],       // 4-7
-        &g_waist[0],                                                // 8
-        &g_leg_l[0], &g_leg_l[1], &g_leg_l[2], &g_leg_l[3], &g_leg_l[4], &g_leg_l[5], // 9-14
-        &g_leg_r[0], &g_leg_r[1], &g_leg_r[2], &g_leg_r[3], &g_leg_r[4], &g_leg_r[5], // 15-20
+        &g_leg_l[0], &g_leg_l[1], &g_leg_l[2], &g_leg_l[3], &g_leg_l[4], &g_leg_l[5], // 0-5
+        &g_leg_r[0], &g_leg_r[1], &g_leg_r[2], &g_leg_r[3], &g_leg_r[4], &g_leg_r[5], // 6-11
+        &g_waist[0],                                                                // 12
+        &g_arm_l[0], &g_arm_l[1], &g_arm_l[2], &g_arm_l[3],                         // 13-16
+        &g_arm_r[0], &g_arm_r[1], &g_arm_r[2], &g_arm_r[3],                         // 17-20
     };
     int idx = CONTROL_SINGLE;
     if (idx >= 0 && idx < kTotalJoints) {
@@ -333,8 +348,11 @@ struct ReplayJointDesc {
     int txt_col;          // store_ref_motion.txt 中 dof_pos 的列号 (0-44)
 };
 
-// 21 关节映射表，按 robot_joint_names 顺序 = SDK 下发顺序 =
-// LEG_L(6) → LEG_R(6) → WAIST(1) → ARM_L(4) → ARM_R(4)
+// 21 关节映射表:
+// - 表项顺序按 controller robot_joint_names / SDK 下发顺序排列。
+// - txt_col 是 store_ref_motion.txt 中的位置列，依据 ref_motion_fields.yaml。
+// - txt_col 不是 SDK 全局关节索引，下发前必须通过这张表重排。
+// SDK 下发顺序: LEG_L(6) → LEG_R(6) → WAIST(1) → ARM_L(4) → ARM_R(4)
 static const ReplayJointDesc kReplayMapping[21] = {
     // LEG_L (kp/kd idx 0-5)
     {static_cast<int>(SdkComponentType::LEG_L), 0, 12},  // left_hip_pitch
@@ -384,7 +402,7 @@ static bool parseKpKdYaml(const std::string& path, float kp[21], float kd[21]) {
         if (strncmp(s, "scales:", 7) == 0) { in_kps = false; in_kds = false; continue; }
 
         if (in_kps || in_kds) {
-            // stop when hitting next section or empty after a list
+            // 进入下一个 YAML 段时停止读取当前 kps/kds 列表。
             if (s[0] != '-' && *s != '\0' && s[0] != '#') {
                 in_kps = false;
                 in_kds = false;
@@ -642,7 +660,7 @@ int main(int argc, char* argv[]) {
 
         for (int step = 0; step < ramp_steps && g_running; step++) {
             float alpha = static_cast<float>(step + 1) / ramp_steps;
-            // ease-in-out: smoother start and end
+            // 平滑插值：起点和终点速度更缓，避免突变。
             float s = alpha * alpha * (3.0f - 2.0f * alpha);
 
             for (size_t i = 0; i < ramp_cmds.size(); i++) {
