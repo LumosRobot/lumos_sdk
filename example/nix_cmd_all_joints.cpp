@@ -62,13 +62,13 @@
 // 示例目标控制：使用下方 g_leg_l/g_arm_l/... 数组里的固定目标值。
 //#define CONTROL_ALL          
 //#define CONTROL_COMPONENT static_cast<int>(SdkComponentType::LEG_R) // ARM_L | ARM_R | WAIST | LEG_L | LEG_R
-//#define CONTROL_SINGLE  12         // 全局索引: 12 = WAIST 腰
+#define CONTROL_SINGLE  3         // 全局索引: 12 = WAIST 腰
 
 // 策略轨迹回放：读取 store_ref_motion.txt + kp_kd.yaml，按 argv[1] 指定遍数回放。
-#define CONTROL_REPLAY
+// #define CONTROL_REPLAY
 
 // 仅非 CONTROL_REPLAY 控制源使用；CONTROL_REPLAY 不要打开这个宏。
-// #define MODE_ONESHOT
+#define MODE_ONESHOT
 
 #if (defined(CONTROL_ALL) + defined(CONTROL_COMPONENT) + defined(CONTROL_SINGLE) + defined(CONTROL_REPLAY)) != 1
 #error "Define exactly one control source: CONTROL_ALL, CONTROL_COMPONENT, CONTROL_SINGLE, or CONTROL_REPLAY."
