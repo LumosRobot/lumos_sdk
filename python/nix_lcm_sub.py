@@ -32,6 +32,14 @@ feedback CSV。
     head build/nix_feedback_hw.csv
     tail build/nix_feedback_hw.csv
 
+    # 生成的 CSV 第一行会写入 schema 版本；优先读取 lumos_pipeline 的
+    # 当前 schema JSON，读不到时退回特殊默认值 v0.0：
+    #   # feedback_schema=v1.0
+    # 可用 lumos_pipeline 校验：
+    PYTHONPATH=lumos_pipeline/src:lumos_diagnostics/src \
+      python -m lumos_pipeline.cli verify-schema \
+      build/nix_feedback_hw.csv --robot-model nix --require-header
+
     # 本机 mock/pub-sub 环回测试时用 --local，避免依赖外部网络路由
     python3 lumos_sdk/python/nix_lcm_sub.py --local --duration 10
 
@@ -59,6 +67,7 @@ from __future__ import annotations
 import argparse
 import csv
 import importlib
+import json
 import sys
 import time
 from dataclasses import dataclass
@@ -69,6 +78,7 @@ from typing import Callable, Iterable, List, Optional, Sequence
 DEFAULT_LCM_URL = "udpm://239.255.76.67:7667?ttl=255"
 LOCAL_LCM_URL = "udpm://239.255.76.67:7667?ttl=0"
 DEFAULT_JOINT_CHANNEL = "JointsData"
+DEFAULT_FEEDBACK_SCHEMA_VERSION = "v0.0"
 
 
 class LcmUnavailableError(RuntimeError):
@@ -159,6 +169,25 @@ def _sdk_root() -> Path:
 
 def _typedef_dir() -> Path:
     return _sdk_root() / "lcm_typedef" / "python"
+
+
+def _repo_root() -> Path:
+    return _sdk_root().parent
+
+
+def feedback_schema_json_path() -> Path:
+    return _repo_root() / "lumos_pipeline" / "src" / "lumos_pipeline" / "schemas" / "feedback_v1.json"
+
+
+def resolve_feedback_schema_version() -> str:
+    """Return the active feedback schema version, or ``v0.0`` when unavailable."""
+
+    try:
+        with feedback_schema_json_path().open("r", encoding="utf-8") as handle:
+            version = json.load(handle).get("version", "")
+    except (OSError, json.JSONDecodeError):
+        return DEFAULT_FEEDBACK_SCHEMA_VERSION
+    return str(version).strip() or DEFAULT_FEEDBACK_SCHEMA_VERSION
 
 
 def _load_lcm_class(modname: str):
@@ -356,17 +385,22 @@ class NixLcmSubscriber:
 def write_feedback_rows(csv_path: str, rows: Iterable[dict], append: bool = True) -> None:
     """Write decoded samples using the current feedback CSV column names.
 
-    这里先按当前 pipeline 的列名写出。schema 版本头和单位契约属于 ROADMAP
-    3.0.2；本脚本只负责把 LCM 原始值落到稳定列里。
+    新文件第一行写入 ``# feedback_schema=<version>``。版本优先来自
+    ``lumos_pipeline`` 的 schema JSON；读不到时退回特殊默认值 ``v0.0``。
+    pipeline 读取时使用 ``comment="#"`` 会跳过该元数据行；``lpx
+    verify-schema --require-header`` 会用它确认 schema 版本。
     """
 
     path = Path(csv_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     file_exists = path.exists() and path.stat().st_size > 0
     mode = "a" if append else "w"
+    write_header = not file_exists or not append
     with path.open(mode, newline="", encoding="utf-8") as handle:
+        if write_header:
+            handle.write(f"# feedback_schema={resolve_feedback_schema_version()}\n")
         writer = csv.DictWriter(handle, fieldnames=FEEDBACK_CSV_COLUMNS)
-        if not file_exists or not append:
+        if write_header:
             writer.writeheader()
         writer.writerows(rows)
 

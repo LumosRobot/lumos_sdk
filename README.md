@@ -167,6 +167,43 @@ head build/nix_feedback_hw_v2.csv
 tail build/nix_feedback_hw_v2.csv
 ```
 
+生成的 CSV 第一行会写入 feedback schema 版本：
+
+```text
+# feedback_schema=v1.0
+```
+
+版本来源规则：
+
+- 默认值是特殊值 `v0.0`
+- 运行时优先读取 `../lumos_pipeline/src/lumos_pipeline/schemas/feedback_v1.json` 中的 `version`
+- 如果读取失败、JSON 解析失败或没有 `version` 字段，则保留默认值 `v0.0`
+
+验证当前能解析到的 schema 版本：
+
+```bash
+cd lumos_sdk
+python3 - <<'PY'
+import sys
+sys.path.insert(0, "python")
+import nix_lcm_sub as s
+
+print("schema path:", s.feedback_schema_json_path())
+print("resolved version:", s.resolve_feedback_schema_version())
+PY
+```
+
+注意：最后一行 `PY` 必须顶格写，前面不能有空格；否则 shell 会进入
+`heredoc>` 续行等待。
+
+验证生成的 CSV 带版本头并通过 pipeline schema 校验：
+
+```bash
+PYTHONPATH=lumos_pipeline/src:lumos_diagnostics/src \
+python -m lumos_pipeline.cli verify-schema \
+  build/nix_feedback_hw_v2.csv --robot-model nix --require-header
+```
+
 正常结果应满足：
 
 - `decode_errors=0`
