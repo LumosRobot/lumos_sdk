@@ -119,6 +119,61 @@ sdk_lcmt_joint_data结构字段说明：
 - res3: 
 - res4: 
 
+### NIX Python LCM 反馈采集
+
+`python/nix_lcm_sub.py` 用于订阅 NIX 控制器发布的 `JointsData`，解码
+`sdk_lcmt_joint_datasets`，并可选写成 `lumos_pipeline` 可读取的 feedback CSV。
+原有 `python/lcm_sub.py` 保持不变。
+
+本机 mock 环回测试：
+
+```bash
+# 终端 A
+python3 lumos_sdk/python/nix_lcm_sub.py --local --once
+
+# 终端 B
+python3 lumos_sdk/python/nix_lcm_pub_mock.py --local --count 5
+```
+
+真机监听前，先配置连接机器人的网卡多播路由：
+
+```bash
+cd lumos_sdk
+source config_network_lcm.sh ethXXX
+cd ..
+```
+
+确认真机每帧 21 个关节：
+
+```bash
+python3 lumos_sdk/python/nix_lcm_sub.py --duration 2 --print-limit 21
+```
+
+采集 10 秒真机 feedback CSV：
+
+```bash
+python3 lumos_sdk/python/nix_lcm_sub.py \
+  --duration 10 \
+  --print-every 500 \
+  --print-limit 21 \
+  --csv build/nix_feedback_hw_v2.csv
+```
+
+采集后检查：
+
+```bash
+wc -l build/nix_feedback_hw_v2.csv
+head build/nix_feedback_hw_v2.csv
+tail build/nix_feedback_hw_v2.csv
+```
+
+正常结果应满足：
+
+- `decode_errors=0`
+- 每帧 `samples=21`
+- CSV 中 `JointID` 为全局唯一键，例如 `1:0`、`8:0`、`9:5`、`7:0`
+- `MotorCurrent` 当前可能全 0，此字段在 NIX 真机样本中暂未验证
+
 
 #### SetImuDataCb
 bool SetImuDataCb(ImuDateCb cb);
