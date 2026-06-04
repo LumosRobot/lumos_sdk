@@ -25,15 +25,15 @@ from typing import Optional, Sequence
 
 
 DEFAULT_LCM_URL = "udpm://239.255.76.67:7667?ttl=255"
-LOCAL_LCM_URL = "udpm://239.255.76.67:7667?ttl=0"
-DEFAULT_JOINT_CHANNEL = "JointsData"
-NIX_JOINT_KEYS = (
-    (1, 0), (1, 1), (1, 2), (1, 3),
-    (2, 0), (2, 1), (2, 2), (2, 3),
+LOCAL_LCM_URL = "udpm://239.255.76.67:7667?ttl=0" # 本机 pub/sub 用这个 URL，避免干扰同网段其它机器的订阅器
+DEFAULT_JOINT_CHANNEL = "JointsData"  # LCM channel 
+NIX_JOINT_KEYS = ( # 顺序与 SDK 下发顺序一致，方便对照订阅器输出。LEG_L 6 + LEG_R 6 + WAIST 1 + ARM_L 4 + ARM_R 4 = 21 joints
     (8, 0), (8, 1), (8, 2), (8, 3), (8, 4), (8, 5),
     (9, 0), (9, 1), (9, 2), (9, 3), (9, 4), (9, 5),
     (7, 0),
-)
+    (1, 0), (1, 1), (1, 2), (1, 3),
+    (2, 0), (2, 1), (2, 2), (2, 3),
+)*
 
 
 class MockPublisherError(RuntimeError):
@@ -85,8 +85,8 @@ def load_joint_types():
 def build_mock_message(frame_index: int = 0, joints: int = 12):
     """Build one fake ``sdk_lcmt_joint_datasets`` message.
 
-    By default this mirrors the current NIX 21-joint layout:
-    ARM_L 4 + ARM_R 4 + LEG_L 6 + LEG_R 6 + WAIST 1. Values change with
+    By default this mirrors the SDK 下发顺序 (NIX2, 21 joints):
+    LEG_L 6 + LEG_R 6 + WAIST 1 + ARM_L 4 + ARM_R 4. Values change with
     ``frame_index`` so repeated publishes are easy to distinguish in subscriber
     output.
     """
