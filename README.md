@@ -211,6 +211,167 @@ python -m lumos_pipeline.cli verify-schema \
 - CSV 中 `JointID` 为全局唯一键，例如 `1:0`、`8:0`、`9:5`、`7:0`
 - `MotorCurrent` 当前可能全 0，此字段在 NIX 真机样本中暂未验证
 
+### NIX Python 关节指令下发
+
+`python/nix_joint_cmd.py` 用于替代 `example/nix_cmd_all_joints.cpp` 中依赖宏切换的常用关节指令测试。它通过运行时参数发布 `sdk_lcmt_joint_cmds`，不需要重新编译 C++ 示例。
+
+边界：
+
+- 这个脚本只发关节指令，不负责进入或退出 SDK 模式。
+- 先用 `python/sdk_debug.py mode 1` 或其它已验证流程进入 SDK 模式。
+- 第一次使用先加 `--dry-run`，确认 component、joint 和目标值后再发布。
+
+查看组件编号和 NIX2 全局关节索引：
+
+```bash
+python3 lumos_sdk/python/nix_joint_cmd.py list
+```
+
+单关节 dry-run：
+
+```bash
+python3 lumos_sdk/python/nix_joint_cmd.py single \
+  --component WAIST \
+  --joint-id 0 \
+  --pos 0.30 \
+  --kp 160 \
+  --kd 6 \
+  --dry-run
+```
+
+发布一次腰关节目标：
+
+```bash
+python3 lumos_sdk/python/nix_joint_cmd.py single \
+  --component WAIST \
+  --joint-id 0 \
+  --pos 0.30 \
+  --kp 160 \
+  --kd 6
+```
+
+按 NIX2 全局关节索引发布，索引顺序为 `LEG_L(0-5)`、`LEG_R(6-11)`、`WAIST(12)`、`ARM_L(13-16)`、`ARM_R(17-20)`：
+
+```bash
+python3 lumos_sdk/python/nix_joint_cmd.py global \
+  --index 12 \
+  --pos 0.30 \
+  --kp 160 \
+  --kd 6 \
+  --duration 2 \
+  --rate-hz 100
+```
+
+批量下发多个目标，同一个 `--target` 格式为 `COMPONENT:JOINT_ID:POS[:KP[:KD[:VEL[:TOR[:CTRL_WORD]]]]]`：
+
+```bash
+python3 lumos_sdk/python/nix_joint_cmd.py batch \
+  --target LEG_L:3:0.20:160:6 \
+  --target WAIST:0:0.30:160:6 \
+  --duration 1
+```
+
+从 CSV 下发目标，CSV 至少包含 `component,joint_id,pos`，可选列为 `kp,kd,vel,tor,cur,ctrl_word`：
+
+```csv
+component,joint_id,pos,kp,kd
+WAIST,0,0.30,160,6
+LEG_L,3,0.20,160,6
+```
+
+```bash
+python3 lumos_sdk/python/nix_joint_cmd.py file \
+  --path build/nix_joint_targets.csv \
+  --duration 1 \
+  --rate-hz 100
+```
+
+回放模型目录中的舞蹈/参考动作。该命令读取 `store_ref_motion.txt` 和 `kp_kd.yaml`，按 `nix_cmd_all_joints.cpp` 的 replay 映射重排为 SDK 21 关节顺序：
+
+```bash
+python3 lumos_sdk/python/nix_joint_cmd.py replay \
+  --model-dir lumos_sdk/models/nix2_policy/sanlin_04101426 \
+  --loops 1 \
+  --dry-run
+```
+
+确认首帧/末帧和增益后，去掉 `--dry-run` 发布：
+
+```bash
+python3 lumos_sdk/python/nix_joint_cmd.py replay \
+  --model-dir lumos_sdk/models/nix2_policy/sanlin_04101426 \
+  --loops 1 \
+  --rate-hz 100
+```
+
+`--loops 0` 与旧 C++ 示例一致，表示持续循环直到 Ctrl-C：
+
+```bash
+python3 lumos_sdk/python/nix_joint_cmd.py replay \
+  --model-dir lumos_sdk/models/nix2_policy/sanlin_04101426 \
+  --loops 0 \
+  --rate-hz 100
+```
+
+调试时可只加载前几帧：
+
+```bash
+python3 lumos_sdk/python/nix_joint_cmd.py replay \
+  --model-dir lumos_sdk/models/nix2_policy/sanlin_04101426 \
+  --max-frames 20 \
+  --dry-run
+```
+
+### NIX Python 状态切换与等待确认
+
+`python/nix_robot_state.py` 用于发送机器人高层状态命令，并等待 `lcm_robot_status` 确认。它只管 `RESET` / `STAND` / `RL_*` 这类状态，不发布关节级 PD 指令。
+
+推荐在真实采集前使用它替代手动执行 `sdk_debug.py state 1`、`sdk_debug.py state 2` 和人工观察 `listen`。
+
+只预览流程，不发布 LCM：
+
+```bash
+python3 lumos_sdk/python/nix_robot_state.py stand --dry-run
+```
+
+执行 `RESET -> STAND`，等待确认后进入 SDK 模式：
+
+```bash
+python3 lumos_sdk/python/nix_robot_state.py stand \
+  --timeout 15 \
+  --stand-settle 10
+```
+
+成功时应看到：
+
+```text
+已发送：state RESET(1)
+已确认：state=RESET(1)
+已发送：state STAND(2)
+已确认：state=STAND(2)
+已发送：mode SDK(1)
+```
+
+只发送并等待单个状态：
+
+```bash
+python3 lumos_sdk/python/nix_robot_state.py state STAND \
+  --wait \
+  --timeout 15
+```
+
+监听机器人状态：
+
+```bash
+python3 lumos_sdk/python/nix_robot_state.py listen --duration 10
+```
+
+采集结束后切回 RL controller type：
+
+```bash
+python3 lumos_sdk/python/nix_robot_state.py mode RL
+```
+
 
 #### SetImuDataCb
 bool SetImuDataCb(ImuDateCb cb);
