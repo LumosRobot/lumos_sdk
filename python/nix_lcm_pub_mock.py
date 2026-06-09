@@ -33,7 +33,7 @@ NIX_JOINT_KEYS = ( # 顺序与 SDK 下发顺序一致，方便对照订阅器输
     (7, 0),
     (1, 0), (1, 1), (1, 2), (1, 3),
     (2, 0), (2, 1), (2, 2), (2, 3),
-)*
+)
 
 
 class MockPublisherError(RuntimeError):
@@ -124,7 +124,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--local", action="store_true", help="Use ttl=0 for local mock pub/sub on this machine.")
     parser.add_argument("--count", type=int, default=5, help="Number of messages to publish.")
     parser.add_argument("--rate-hz", type=float, default=10.0, help="Publish rate.")
-    parser.add_argument("--joints", type=int, default=12, help="Number of fake joints per message.")
+    parser.add_argument("--joints", type=int, default=21, help="Number of fake joints per message.")
     parser.add_argument("--quiet", action="store_true")
     return parser
 
