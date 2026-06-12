@@ -110,6 +110,7 @@ def build_mock_message(frame_index: int = 0, joints: int = 12):
         d.vel = 0.2 * i + 0.01 * frame_index
         d.tor = 0.3 * i + 0.01 * frame_index
         d.cur = 0.4 * i + 0.01 * frame_index
+        d.res4 = 35 + (i % 6) + frame_index
         msg.datasets.append(d)
 
     return msg

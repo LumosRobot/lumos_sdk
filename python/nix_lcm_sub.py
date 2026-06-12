@@ -94,10 +94,11 @@ class NixJointSample:
     joint_id: int
     stat: int
     pos_high: float
-    vel: float
-    tor: float
-    cur: float
+    vel: float          # 速度
+    tor: float          # 力矩
+    cur: float          # 电流
     pos_low: float
+    temp: int           # 温度
     raw_component: str = DEFAULT_JOINT_CHANNEL
 
     def feedback_row(self) -> dict:
@@ -111,7 +112,7 @@ class NixJointSample:
             "ActualVel": self.vel,
             "Torque": self.tor,
             "MotorCurrent": self.cur,
-            "Temperature": "",
+            "Temperature": self.temp,
             "ImuGyroX": "",
             "ImuGyroY": "",
             "ImuGyroZ": "",
@@ -376,6 +377,7 @@ class NixLcmSubscriber:
                     tor=float(joint_data.tor),
                     cur=float(joint_data.cur),
                     pos_low=float(joint_data.pos_low),
+                    temp=int(joint_data.res4),
                     raw_component=raw_component,
                 )
             )
@@ -411,7 +413,8 @@ def _print_samples(samples: Sequence[NixJointSample], limit: int) -> None:
             "  "
             f"component={sample.component_type} joint={sample.joint_id} "
             f"pos_high={sample.pos_high:+.6f} vel={sample.vel:+.6f} "
-            f"tor={sample.tor:+.6f} cur={sample.cur:+.6f} stat={sample.stat}"
+            f"tor={sample.tor:+.6f} cur={sample.cur:+.6f} "
+            f"temp={sample.temp} stat={sample.stat}"
         )
 
 
