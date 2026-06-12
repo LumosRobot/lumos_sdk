@@ -111,7 +111,7 @@ class NixJointSample:
             "Position": self.pos_high,
             "ActualVel": self.vel,
             "Torque": self.tor,
-            "MotorCurrent": self.cur,
+            "MotorCurrent": self.cur, # 似乎电机向上发布
             "Temperature": self.temp,
             "ImuGyroX": "",
             "ImuGyroY": "",
