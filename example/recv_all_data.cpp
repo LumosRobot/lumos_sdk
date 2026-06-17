@@ -122,7 +122,7 @@ static void on_robot_status(const robot_status_lcmt* msg) {
     g_status_records.push_back({wall_time_string(), msg->state, msg->type});
 }
 
-static void on_joint_data(const sdk_lcmt_joint_datasets* msg) {
+static void on_joint_data(const joint_datasets_lcmt* msg) {
     std::string ts = wall_time_string();
     std::lock_guard<std::mutex> lock(g_data_mutex);
     for (int i = 0; i < msg->datasets_num; i++) {
@@ -140,7 +140,7 @@ static void on_joint_data(const sdk_lcmt_joint_datasets* msg) {
     }
 }
 
-static void on_imu_data(const microstrain_lcmt* msg) {
+static void on_imu_data(const imu_data_lcmt* msg) {
     static int dbg_count = 0;
     if (++dbg_count <= 3) {
         LOG(INFO) << "[IMU DEBUG #" << dbg_count << "]"

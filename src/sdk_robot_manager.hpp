@@ -4,13 +4,13 @@
 #include <thread>
 #include <atomic>
 #include <lcm/lcm-cpp.hpp>
-#include <sdk_lcmt_joint_datasets.hpp>
-#include <microstrain_lcmt.hpp>
+#include <joint_datasets_lcmt.hpp>
+#include <imu_data_lcmt.hpp>
 #include <robot_cmd_lcmt.hpp>
 #include <robot_status_lcmt.hpp>
 
-using JointDateCb = void (*)(const sdk_lcmt_joint_datasets*);
-using ImuDateCb = void (*)(const microstrain_lcmt*);
+using JointDateCb = void (*)(const joint_datasets_lcmt*);
+using ImuDateCb = void (*)(const imu_data_lcmt*);
 using GameHandlerCmdCb = void (*)(const robot_cmd_lcmt*);
 using RobotStatusCb = void (*)(const robot_status_lcmt*);
 

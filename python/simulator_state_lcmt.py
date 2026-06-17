@@ -7,7 +7,7 @@ DO NOT MODIFY BY HAND!!!!
 from io import BytesIO
 import struct
 
-class simulator_lcmt(object):
+class simulator_state_lcmt(object):
 
     __slots__ = ["vb", "rpy", "timesteps", "time", "quat", "R", "omegab", "omega", "p", "v", "vbd", "q", "qd", "qdd", "tau", "f_foot", "p_foot"]
 
@@ -53,7 +53,7 @@ class simulator_lcmt(object):
 
     def encode(self):
         buf = BytesIO()
-        buf.write(simulator_lcmt._get_packed_fingerprint())
+        buf.write(simulator_state_lcmt._get_packed_fingerprint())
         self._encode_one(buf)
         return buf.getvalue()
 
@@ -82,13 +82,13 @@ class simulator_lcmt(object):
             buf = data
         else:
             buf = BytesIO(data)
-        if buf.read(8) != simulator_lcmt._get_packed_fingerprint():
+        if buf.read(8) != simulator_state_lcmt._get_packed_fingerprint():
             raise ValueError("Decode error")
-        return simulator_lcmt._decode_one(buf)
+        return simulator_state_lcmt._decode_one(buf)
 
     @staticmethod
     def _decode_one(buf):
-        self = simulator_lcmt()
+        self = simulator_state_lcmt()
         self.vb = struct.unpack('>3d', buf.read(24))
         self.rpy = struct.unpack('>3d', buf.read(24))
         self.timesteps, self.time = struct.unpack(">qd", buf.read(16))
@@ -111,7 +111,7 @@ class simulator_lcmt(object):
 
     @staticmethod
     def _get_hash_recursive(parents):
-        if simulator_lcmt in parents: return 0
+        if simulator_state_lcmt in parents: return 0
         tmphash = (0xc07fa14d3758d2e9) & 0xffffffffffffffff
         tmphash  = (((tmphash<<1)&0xffffffffffffffff) + (tmphash>>63)) & 0xffffffffffffffff
         return tmphash
@@ -119,11 +119,11 @@ class simulator_lcmt(object):
 
     @staticmethod
     def _get_packed_fingerprint():
-        if simulator_lcmt._packed_fingerprint is None:
-            simulator_lcmt._packed_fingerprint = struct.pack(">Q", simulator_lcmt._get_hash_recursive([]))
-        return simulator_lcmt._packed_fingerprint
+        if simulator_state_lcmt._packed_fingerprint is None:
+            simulator_state_lcmt._packed_fingerprint = struct.pack(">Q", simulator_state_lcmt._get_hash_recursive([]))
+        return simulator_state_lcmt._packed_fingerprint
 
     def get_hash(self):
         """Get the LCM hash of the struct"""
-        return struct.unpack(">Q", simulator_lcmt._get_packed_fingerprint())[0]
+        return struct.unpack(">Q", simulator_state_lcmt._get_packed_fingerprint())[0]
 

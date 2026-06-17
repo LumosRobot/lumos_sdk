@@ -32,11 +32,11 @@ static void on_robot_status(const robot_status_lcmt* msg) {
     g_robot_state = msg->state;
 }
 
-static void on_joint_data(const sdk_lcmt_joint_datasets* /*msg*/) {
+static void on_joint_data(const joint_datasets_lcmt* /*msg*/) {
     g_joint_count++;
 }
 
-static void on_imu_data(const microstrain_lcmt* /*msg*/) {
+static void on_imu_data(const imu_data_lcmt* /*msg*/) {
     g_imu_count++;
 }
 

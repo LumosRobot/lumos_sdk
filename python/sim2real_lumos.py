@@ -55,18 +55,18 @@ def _load_lcm_class(modname: str):
     return cls
 
 
-sdk_lcmt_joint_cmd      = _load_lcm_class("sdk_lcmt_joint_cmd")
-sdk_lcmt_joint_data     = _load_lcm_class("sdk_lcmt_joint_data")
-sdk_lcmt_joint_cmds     = _load_lcm_class("sdk_lcmt_joint_cmds")
-sdk_lcmt_joint_datasets = _load_lcm_class("sdk_lcmt_joint_datasets")
-microstrain_lcmt        = _load_lcm_class("microstrain_lcmt")
+joint_cmd_lcmt      = _load_lcm_class("joint_cmd_lcmt")
+joint_data_lcmt     = _load_lcm_class("joint_data_lcmt")
+joint_cmds_lcmt     = _load_lcm_class("joint_cmds_lcmt")
+joint_datasets_lcmt = _load_lcm_class("joint_datasets_lcmt")
+imu_data_lcmt        = _load_lcm_class("imu_data_lcmt")
 
 
 # ── 常量 ─────────────────────────────────────────────────────────────
 LCM_URL = "udpm://239.255.76.67:7667?ttl=255"
-CH_JOINT_CMDS = "sdk_lcm_joint_cmds"
-CH_JOINT_DATA = "JointsData"
-CH_IMU        = "myIMU"
+CH_JOINT_CMDS = "lcm_joint_cmd"
+CH_JOINT_DATA = "lcm_joint_data"
+CH_IMU        = "lcm_imu_data"
 
 CONTROL_HZ    = 50          # 与 sim2sim 中 1/(simulation_dt*control_decimation) 一致
 NUM_ACTIONS   = 21
@@ -160,8 +160,8 @@ class RobotState:
 
 def setup_lcm(lc, state: RobotState):
     """订阅 LCM 通道，在主线程 handle_timeout 循环中消费。"""
-    lc.subscribe(CH_IMU,        lambda ch, data: state.update_imu(microstrain_lcmt.decode(data)))
-    lc.subscribe(CH_JOINT_DATA, lambda ch, data: state.update_joint(sdk_lcmt_joint_datasets.decode(data)))
+    lc.subscribe(CH_IMU,        lambda ch, data: state.update_imu(imu_data_lcmt.decode(data)))
+    lc.subscribe(CH_JOINT_DATA, lambda ch, data: state.update_joint(joint_datasets_lcmt.decode(data)))
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -297,12 +297,12 @@ def build_observation(motion_pos, motion_vel, motion_quat,
 # ═══════════════════════════════════════════════════════════════════
 def send_joint_targets(lc, joint_names, target_pos, kp, kd):
     """按 joint_names 顺序下发；target_pos/kp/kd 都是与 joint_names 同长的数组。"""
-    cmds = sdk_lcmt_joint_cmds()
+    cmds = joint_cmds_lcmt()
     cmds.cmds_num = len(joint_names)
     cmds.cmds = []
     for i, name in enumerate(joint_names):
         ctype, jid = JOINT_NAME_TO_SDK[name]
-        c = sdk_lcmt_joint_cmd()
+        c = joint_cmd_lcmt()
         c.component_type = ctype
         c.joint_id       = jid
         c.ctrlWord       = 3

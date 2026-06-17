@@ -7,13 +7,13 @@ DO NOT MODIFY BY HAND!!!!
 from io import BytesIO
 import struct
 
-import sdk_lcmt_joint_cmd
+import joint_cmd_lcmt
 
-class sdk_lcmt_joint_cmds(object):
+class joint_cmds_lcmt(object):
 
     __slots__ = ["cmds_num", "cmds"]
 
-    __typenames__ = ["int16_t", "sdk_lcmt_joint_cmd"]
+    __typenames__ = ["int16_t", "joint_cmd_lcmt"]
 
     __dimensions__ = [None, ["cmds_num"]]
 
@@ -21,18 +21,18 @@ class sdk_lcmt_joint_cmds(object):
         self.cmds_num = 0
         """ LCM Type: int16_t """
         self.cmds = []
-        """ LCM Type: sdk_lcmt_joint_cmd[cmds_num] """
+        """ LCM Type: joint_cmd_lcmt[cmds_num] """
 
     def encode(self):
         buf = BytesIO()
-        buf.write(sdk_lcmt_joint_cmds._get_packed_fingerprint())
+        buf.write(joint_cmds_lcmt._get_packed_fingerprint())
         self._encode_one(buf)
         return buf.getvalue()
 
     def _encode_one(self, buf):
         buf.write(struct.pack(">h", self.cmds_num))
         for i0 in range(self.cmds_num):
-            assert self.cmds[i0]._get_packed_fingerprint() == sdk_lcmt_joint_cmd._get_packed_fingerprint()
+            assert self.cmds[i0]._get_packed_fingerprint() == joint_cmd_lcmt._get_packed_fingerprint()
             self.cmds[i0]._encode_one(buf)
 
     @staticmethod
@@ -41,35 +41,35 @@ class sdk_lcmt_joint_cmds(object):
             buf = data
         else:
             buf = BytesIO(data)
-        if buf.read(8) != sdk_lcmt_joint_cmds._get_packed_fingerprint():
+        if buf.read(8) != joint_cmds_lcmt._get_packed_fingerprint():
             raise ValueError("Decode error")
-        return sdk_lcmt_joint_cmds._decode_one(buf)
+        return joint_cmds_lcmt._decode_one(buf)
 
     @staticmethod
     def _decode_one(buf):
-        self = sdk_lcmt_joint_cmds()
+        self = joint_cmds_lcmt()
         self.cmds_num = struct.unpack(">h", buf.read(2))[0]
         self.cmds = []
         for i0 in range(self.cmds_num):
-            self.cmds.append(sdk_lcmt_joint_cmd._decode_one(buf))
+            self.cmds.append(joint_cmd_lcmt._decode_one(buf))
         return self
 
     @staticmethod
     def _get_hash_recursive(parents):
-        if sdk_lcmt_joint_cmds in parents: return 0
-        newparents = parents + [sdk_lcmt_joint_cmds]
-        tmphash = (0xa610e843b9e734ce+ sdk_lcmt_joint_cmd._get_hash_recursive(newparents)) & 0xffffffffffffffff
+        if joint_cmds_lcmt in parents: return 0
+        newparents = parents + [joint_cmds_lcmt]
+        tmphash = (0xa610e843b9e734ce+ joint_cmd_lcmt._get_hash_recursive(newparents)) & 0xffffffffffffffff
         tmphash  = (((tmphash<<1)&0xffffffffffffffff) + (tmphash>>63)) & 0xffffffffffffffff
         return tmphash
     _packed_fingerprint = None
 
     @staticmethod
     def _get_packed_fingerprint():
-        if sdk_lcmt_joint_cmds._packed_fingerprint is None:
-            sdk_lcmt_joint_cmds._packed_fingerprint = struct.pack(">Q", sdk_lcmt_joint_cmds._get_hash_recursive([]))
-        return sdk_lcmt_joint_cmds._packed_fingerprint
+        if joint_cmds_lcmt._packed_fingerprint is None:
+            joint_cmds_lcmt._packed_fingerprint = struct.pack(">Q", joint_cmds_lcmt._get_hash_recursive([]))
+        return joint_cmds_lcmt._packed_fingerprint
 
     def get_hash(self):
         """Get the LCM hash of the struct"""
-        return struct.unpack(">Q", sdk_lcmt_joint_cmds._get_packed_fingerprint())[0]
+        return struct.unpack(">Q", joint_cmds_lcmt._get_packed_fingerprint())[0]
 

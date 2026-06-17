@@ -7,7 +7,7 @@ DO NOT MODIFY BY HAND!!!!
 from io import BytesIO
 import struct
 
-class sdk_lcmt_type(object):
+class control_type_lcmt(object):
 
     __slots__ = ["controller_type"]
 
@@ -21,7 +21,7 @@ class sdk_lcmt_type(object):
 
     def encode(self):
         buf = BytesIO()
-        buf.write(sdk_lcmt_type._get_packed_fingerprint())
+        buf.write(control_type_lcmt._get_packed_fingerprint())
         self._encode_one(buf)
         return buf.getvalue()
 
@@ -34,19 +34,19 @@ class sdk_lcmt_type(object):
             buf = data
         else:
             buf = BytesIO(data)
-        if buf.read(8) != sdk_lcmt_type._get_packed_fingerprint():
+        if buf.read(8) != control_type_lcmt._get_packed_fingerprint():
             raise ValueError("Decode error")
-        return sdk_lcmt_type._decode_one(buf)
+        return control_type_lcmt._decode_one(buf)
 
     @staticmethod
     def _decode_one(buf):
-        self = sdk_lcmt_type()
+        self = control_type_lcmt()
         self.controller_type = struct.unpack(">h", buf.read(2))[0]
         return self
 
     @staticmethod
     def _get_hash_recursive(parents):
-        if sdk_lcmt_type in parents: return 0
+        if control_type_lcmt in parents: return 0
         tmphash = (0xeeef131a4d304ec6) & 0xffffffffffffffff
         tmphash  = (((tmphash<<1)&0xffffffffffffffff) + (tmphash>>63)) & 0xffffffffffffffff
         return tmphash
@@ -54,11 +54,11 @@ class sdk_lcmt_type(object):
 
     @staticmethod
     def _get_packed_fingerprint():
-        if sdk_lcmt_type._packed_fingerprint is None:
-            sdk_lcmt_type._packed_fingerprint = struct.pack(">Q", sdk_lcmt_type._get_hash_recursive([]))
-        return sdk_lcmt_type._packed_fingerprint
+        if control_type_lcmt._packed_fingerprint is None:
+            control_type_lcmt._packed_fingerprint = struct.pack(">Q", control_type_lcmt._get_hash_recursive([]))
+        return control_type_lcmt._packed_fingerprint
 
     def get_hash(self):
         """Get the LCM hash of the struct"""
-        return struct.unpack(">Q", sdk_lcmt_type._get_packed_fingerprint())[0]
+        return struct.unpack(">Q", control_type_lcmt._get_packed_fingerprint())[0]
 

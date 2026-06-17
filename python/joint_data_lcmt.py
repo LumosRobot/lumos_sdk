@@ -7,7 +7,7 @@ DO NOT MODIFY BY HAND!!!!
 from io import BytesIO
 import struct
 
-class sdk_lcmt_joint_data(object):
+class joint_data_lcmt(object):
 
     __slots__ = ["component_type", "joint_id", "stat", "pos_high", "num_cycles_high", "pos_low", "num_cycles_low", "vel", "cur", "tor", "res1", "res2", "res3", "res4"]
 
@@ -47,7 +47,7 @@ class sdk_lcmt_joint_data(object):
 
     def encode(self):
         buf = BytesIO()
-        buf.write(sdk_lcmt_joint_data._get_packed_fingerprint())
+        buf.write(joint_data_lcmt._get_packed_fingerprint())
         self._encode_one(buf)
         return buf.getvalue()
 
@@ -60,19 +60,19 @@ class sdk_lcmt_joint_data(object):
             buf = data
         else:
             buf = BytesIO(data)
-        if buf.read(8) != sdk_lcmt_joint_data._get_packed_fingerprint():
+        if buf.read(8) != joint_data_lcmt._get_packed_fingerprint():
             raise ValueError("Decode error")
-        return sdk_lcmt_joint_data._decode_one(buf)
+        return joint_data_lcmt._decode_one(buf)
 
     @staticmethod
     def _decode_one(buf):
-        self = sdk_lcmt_joint_data()
+        self = joint_data_lcmt()
         self.component_type, self.joint_id, self.stat, self.pos_high, self.num_cycles_high, self.pos_low, self.num_cycles_low, self.vel, self.cur, self.tor, self.res1, self.res2, self.res3, self.res4 = struct.unpack(">hhhfhfhfffhhhh", buf.read(38))
         return self
 
     @staticmethod
     def _get_hash_recursive(parents):
-        if sdk_lcmt_joint_data in parents: return 0
+        if joint_data_lcmt in parents: return 0
         tmphash = (0x6acb8601a0b1c5bb) & 0xffffffffffffffff
         tmphash  = (((tmphash<<1)&0xffffffffffffffff) + (tmphash>>63)) & 0xffffffffffffffff
         return tmphash
@@ -80,11 +80,11 @@ class sdk_lcmt_joint_data(object):
 
     @staticmethod
     def _get_packed_fingerprint():
-        if sdk_lcmt_joint_data._packed_fingerprint is None:
-            sdk_lcmt_joint_data._packed_fingerprint = struct.pack(">Q", sdk_lcmt_joint_data._get_hash_recursive([]))
-        return sdk_lcmt_joint_data._packed_fingerprint
+        if joint_data_lcmt._packed_fingerprint is None:
+            joint_data_lcmt._packed_fingerprint = struct.pack(">Q", joint_data_lcmt._get_hash_recursive([]))
+        return joint_data_lcmt._packed_fingerprint
 
     def get_hash(self):
         """Get the LCM hash of the struct"""
-        return struct.unpack(">Q", sdk_lcmt_joint_data._get_packed_fingerprint())[0]
+        return struct.unpack(">Q", joint_data_lcmt._get_packed_fingerprint())[0]
 

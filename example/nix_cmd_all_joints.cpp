@@ -110,7 +110,7 @@ static void sigint_handler(int) { g_running = 0; }
 static std::mutex g_jpos_mutex;
 static std::map<std::pair<int16_t, int16_t>, float> g_current_pos;
 
-static void on_joint_data(const sdk_lcmt_joint_datasets* msg) {
+static void on_joint_data(const joint_datasets_lcmt* msg) {
     std::lock_guard<std::mutex> lock(g_jpos_mutex);
     for (int i = 0; i < msg->datasets_num; i++) {
         const auto& d = msg->datasets[i];
@@ -302,7 +302,7 @@ static void on_robot_status(const robot_status_lcmt* msg) {
     g_got_status = true;
 }
 
-static void on_imu_data(const microstrain_lcmt*) {
+static void on_imu_data(const imu_data_lcmt*) {
     g_imu_count++;
 }
 

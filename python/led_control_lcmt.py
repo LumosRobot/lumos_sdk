@@ -7,7 +7,7 @@ DO NOT MODIFY BY HAND!!!!
 from io import BytesIO
 import struct
 
-class led_controller_lcmt(object):
+class led_control_lcmt(object):
 
     __slots__ = ["classes", "control_word", "description"]
 
@@ -25,7 +25,7 @@ class led_controller_lcmt(object):
 
     def encode(self):
         buf = BytesIO()
-        buf.write(led_controller_lcmt._get_packed_fingerprint())
+        buf.write(led_control_lcmt._get_packed_fingerprint())
         self._encode_one(buf)
         return buf.getvalue()
 
@@ -46,13 +46,13 @@ class led_controller_lcmt(object):
             buf = data
         else:
             buf = BytesIO(data)
-        if buf.read(8) != led_controller_lcmt._get_packed_fingerprint():
+        if buf.read(8) != led_control_lcmt._get_packed_fingerprint():
             raise ValueError("Decode error")
-        return led_controller_lcmt._decode_one(buf)
+        return led_control_lcmt._decode_one(buf)
 
     @staticmethod
     def _decode_one(buf):
-        self = led_controller_lcmt()
+        self = led_control_lcmt()
         __classes_len = struct.unpack('>I', buf.read(4))[0]
         self.classes = buf.read(__classes_len)[:-1].decode('utf-8', 'replace')
         self.control_word = struct.unpack(">h", buf.read(2))[0]
@@ -62,7 +62,7 @@ class led_controller_lcmt(object):
 
     @staticmethod
     def _get_hash_recursive(parents):
-        if led_controller_lcmt in parents: return 0
+        if led_control_lcmt in parents: return 0
         tmphash = (0x4015416908616319) & 0xffffffffffffffff
         tmphash  = (((tmphash<<1)&0xffffffffffffffff) + (tmphash>>63)) & 0xffffffffffffffff
         return tmphash
@@ -70,11 +70,11 @@ class led_controller_lcmt(object):
 
     @staticmethod
     def _get_packed_fingerprint():
-        if led_controller_lcmt._packed_fingerprint is None:
-            led_controller_lcmt._packed_fingerprint = struct.pack(">Q", led_controller_lcmt._get_hash_recursive([]))
-        return led_controller_lcmt._packed_fingerprint
+        if led_control_lcmt._packed_fingerprint is None:
+            led_control_lcmt._packed_fingerprint = struct.pack(">Q", led_control_lcmt._get_hash_recursive([]))
+        return led_control_lcmt._packed_fingerprint
 
     def get_hash(self):
         """Get the LCM hash of the struct"""
-        return struct.unpack(">Q", led_controller_lcmt._get_packed_fingerprint())[0]
+        return struct.unpack(">Q", led_control_lcmt._get_packed_fingerprint())[0]
 

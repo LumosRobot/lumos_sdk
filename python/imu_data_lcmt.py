@@ -7,7 +7,7 @@ DO NOT MODIFY BY HAND!!!!
 from io import BytesIO
 import struct
 
-class microstrain_lcmt(object):
+class imu_data_lcmt(object):
 
     __slots__ = ["omega", "acc", "temp", "good_packets", "bad_packets", "navQuat", "navOmega", "navRPY"]
 
@@ -35,7 +35,7 @@ class microstrain_lcmt(object):
 
     def encode(self):
         buf = BytesIO()
-        buf.write(microstrain_lcmt._get_packed_fingerprint())
+        buf.write(imu_data_lcmt._get_packed_fingerprint())
         self._encode_one(buf)
         return buf.getvalue()
 
@@ -53,13 +53,13 @@ class microstrain_lcmt(object):
             buf = data
         else:
             buf = BytesIO(data)
-        if buf.read(8) != microstrain_lcmt._get_packed_fingerprint():
+        if buf.read(8) != imu_data_lcmt._get_packed_fingerprint():
             raise ValueError("Decode error")
-        return microstrain_lcmt._decode_one(buf)
+        return imu_data_lcmt._decode_one(buf)
 
     @staticmethod
     def _decode_one(buf):
-        self = microstrain_lcmt()
+        self = imu_data_lcmt()
         self.omega = struct.unpack('>3f', buf.read(12))
         self.acc = struct.unpack('>3f', buf.read(12))
         self.temp, self.good_packets, self.bad_packets = struct.unpack(">fqq", buf.read(20))
@@ -70,7 +70,7 @@ class microstrain_lcmt(object):
 
     @staticmethod
     def _get_hash_recursive(parents):
-        if microstrain_lcmt in parents: return 0
+        if imu_data_lcmt in parents: return 0
         tmphash = (0x491dbdb1d605c43a) & 0xffffffffffffffff
         tmphash  = (((tmphash<<1)&0xffffffffffffffff) + (tmphash>>63)) & 0xffffffffffffffff
         return tmphash
@@ -78,11 +78,11 @@ class microstrain_lcmt(object):
 
     @staticmethod
     def _get_packed_fingerprint():
-        if microstrain_lcmt._packed_fingerprint is None:
-            microstrain_lcmt._packed_fingerprint = struct.pack(">Q", microstrain_lcmt._get_hash_recursive([]))
-        return microstrain_lcmt._packed_fingerprint
+        if imu_data_lcmt._packed_fingerprint is None:
+            imu_data_lcmt._packed_fingerprint = struct.pack(">Q", imu_data_lcmt._get_hash_recursive([]))
+        return imu_data_lcmt._packed_fingerprint
 
     def get_hash(self):
         """Get the LCM hash of the struct"""
-        return struct.unpack(">Q", microstrain_lcmt._get_packed_fingerprint())[0]
+        return struct.unpack(">Q", imu_data_lcmt._get_packed_fingerprint())[0]
 

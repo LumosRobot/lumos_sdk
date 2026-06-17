@@ -46,26 +46,26 @@ def _load_lcm_class(modname: str):
     sys.modules[modname] = cls  # 让其它生成文件 `import modname` 时拿到的是类
     return cls
 
-sdk_lcmt_joint_cmd      = _load_lcm_class("sdk_lcmt_joint_cmd")
-sdk_lcmt_joint_data     = _load_lcm_class("sdk_lcmt_joint_data")
-sdk_lcmt_joint_cmds     = _load_lcm_class("sdk_lcmt_joint_cmds")
-sdk_lcmt_joint_datasets = _load_lcm_class("sdk_lcmt_joint_datasets")
-sdk_lcmt_type           = _load_lcm_class("sdk_lcmt_type")
+joint_cmd_lcmt      = _load_lcm_class("joint_cmd_lcmt")
+joint_data_lcmt     = _load_lcm_class("joint_data_lcmt")
+joint_cmds_lcmt     = _load_lcm_class("joint_cmds_lcmt")
+joint_datasets_lcmt = _load_lcm_class("joint_datasets_lcmt")
+control_type_lcmt           = _load_lcm_class("control_type_lcmt")
 robot_cmd_lcmt          = _load_lcm_class("robot_cmd_lcmt")
 robot_status_lcmt       = _load_lcm_class("robot_status_lcmt")
-microstrain_lcmt        = _load_lcm_class("microstrain_lcmt")
+imu_data_lcmt        = _load_lcm_class("imu_data_lcmt")
 
 
 # ── 与 C++ SDK 保持一致 ─────────────────────────────────────────────
 LCM_URL = "udpm://239.255.76.67:7667?ttl=255"
 
 # 发布通道
-CH_JOINT_CMDS = "sdk_lcm_joint_cmds"
-CH_MODE_CMD   = "sdk_lcm_set_type_cmd"
+CH_JOINT_CMDS = "lcm_joint_cmd"
+CH_MODE_CMD   = "lcm_control_type"
 CH_ROBOT_CMD  = "lcm_robot_cmd"
 # 订阅通道
-CH_JOINT_DATA = "JointsData"
-CH_IMU        = "myIMU"
+CH_JOINT_DATA = "lcm_joint_data"
+CH_IMU        = "lcm_imu_data"
 CH_STATUS     = "lcm_robot_status"
 
 # 组件类型（对应 SdkComponentType）
@@ -89,7 +89,7 @@ class Listener:
         lc.subscribe(CH_STATUS, self._on_status)
 
     def _on_joint(self, channel, data):
-        msg = sdk_lcmt_joint_datasets.decode(data)
+        msg = joint_datasets_lcmt.decode(data)
         self.joint_cnt += 1
         # 每 100 帧打印一次完整的关节数据（约 1s @100Hz）
         if self.joint_cnt % 100 == 1:
@@ -100,7 +100,7 @@ class Listener:
                       f"vel={d.vel:+.3f} tor={d.tor:+.3f} stat={d.stat}")
 
     def _on_imu(self, channel, data):
-        msg = microstrain_lcmt.decode(data)
+        msg = imu_data_lcmt.decode(data)
         self.imu_cnt += 1
         if self.imu_cnt % 200 == 1:
             print(f"[IMU] rpy={msg.navRPY[0]:+.3f},{msg.navRPY[1]:+.3f},{msg.navRPY[2]:+.3f} "
@@ -130,7 +130,7 @@ def start_listen_thread(lc):
 # 发布
 # ═══════════════════════════════════════════════════════════════════
 def send_mode(lc, mode: int):
-    msg = sdk_lcmt_type()
+    msg = control_type_lcmt()
     msg.controller_type = mode
     lc.publish(CH_MODE_CMD, msg.encode())
     print(f"[Send] mode={mode}  (0=RL, 1=SDK)")
@@ -151,8 +151,8 @@ def send_single_joint(lc, component_type: int, joint_id: int,
                       tar_pos: float, kp: float = 60.0, kd: float = 2.0,
                       ctrl_word: int = 3):
     """下发单个关节目标位置（MIT/PD 控制：ctrlWord=3）"""
-    cmds = sdk_lcmt_joint_cmds()
-    cmd = sdk_lcmt_joint_cmd()
+    cmds = joint_cmds_lcmt()
+    cmd = joint_cmd_lcmt()
     cmd.component_type = component_type
     cmd.joint_id = joint_id
     cmd.ctrlWord = ctrl_word

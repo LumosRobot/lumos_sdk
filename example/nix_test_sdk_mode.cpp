@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
     manager.SetRobotStatusCb(on_robot_status);
 
     // Diagnostic: also subscribe to myIMU to verify LCM receive works
-    manager.SetImuDataCb([](const microstrain_lcmt*) { g_imu_count++; });
+    manager.SetImuDataCb([](const imu_data_lcmt*) { g_imu_count++; });
     LOG(INFO) << "SDK initialized, waiting for LCM (checking IMU)...";
     for (int i = 0; i < 30 && g_imu_count == 0; i++) usleep(100000);
     LOG(INFO) << "IMU messages received in 3s: " << g_imu_count.load();
