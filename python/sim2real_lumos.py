@@ -64,9 +64,9 @@ microstrain_lcmt        = _load_lcm_class("microstrain_lcmt")
 
 # ── 常量 ─────────────────────────────────────────────────────────────
 LCM_URL = "udpm://239.255.76.67:7667?ttl=255"
-CH_JOINT_CMDS = "sdk_lcm_joint_cmds"
-CH_JOINT_DATA = "JointsData"
-CH_IMU        = "myIMU"
+CH_JOINT_CMDS = "lcm_joint_cmd"
+CH_JOINT_DATA = "lcm_joint_data"
+CH_IMU        = "lcm_imu_data"
 
 CONTROL_HZ    = 50          # 与 sim2sim 中 1/(simulation_dt*control_decimation) 一致
 NUM_ACTIONS   = 21

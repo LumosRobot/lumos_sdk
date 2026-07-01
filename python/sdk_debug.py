@@ -60,12 +60,12 @@ microstrain_lcmt        = _load_lcm_class("microstrain_lcmt")
 LCM_URL = "udpm://239.255.76.67:7667?ttl=255"
 
 # 发布通道
-CH_JOINT_CMDS = "sdk_lcm_joint_cmds"
-CH_MODE_CMD   = "sdk_lcm_set_type_cmd"
+CH_JOINT_CMDS = "lcm_joint_cmd"
+CH_MODE_CMD   = "lcm_control_type"
 CH_ROBOT_CMD  = "lcm_robot_cmd"
 # 订阅通道
-CH_JOINT_DATA = "JointsData"
-CH_IMU        = "myIMU"
+CH_JOINT_DATA = "lcm_joint_data"
+CH_IMU        = "lcm_imu_data"
 CH_STATUS     = "lcm_robot_status"
 
 # 组件类型（对应 SdkComponentType）

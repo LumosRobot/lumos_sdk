@@ -26,7 +26,7 @@ from typing import Optional, Sequence
 
 DEFAULT_LCM_URL = "udpm://239.255.76.67:7667?ttl=255"
 LOCAL_LCM_URL = "udpm://239.255.76.67:7667?ttl=0" # 本机 pub/sub 用这个 URL，避免干扰同网段其它机器的订阅器
-DEFAULT_JOINT_CHANNEL = "JointsData"  # LCM channel 
+DEFAULT_JOINT_CHANNEL = "lcm_joint_data"  # LCM channel
 NIX_JOINT_KEYS = ( # 顺序与 SDK 下发顺序一致，方便对照订阅器输出。LEG_L 6 + LEG_R 6 + WAIST 1 + ARM_L 4 + ARM_R 4 = 21 joints
     (8, 0), (8, 1), (8, 2), (8, 3), (8, 4), (8, 5),
     (9, 0), (9, 1), (9, 2), (9, 3), (9, 4), (9, 5),

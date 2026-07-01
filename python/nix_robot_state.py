@@ -47,7 +47,7 @@ from typing import Optional, Sequence
 DEFAULT_LCM_URL = "udpm://239.255.76.67:7667?ttl=255"
 LOCAL_LCM_URL = "udpm://239.255.76.67:7667?ttl=0"
 
-CH_MODE_CMD = "sdk_lcm_set_type_cmd"
+CH_MODE_CMD = "lcm_control_type"
 CH_ROBOT_CMD = "lcm_robot_cmd"
 CH_STATUS = "lcm_robot_status"
 
