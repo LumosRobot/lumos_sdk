@@ -571,7 +571,7 @@ int main(int argc, char* argv[]) {
 
     // ── 进入 SDK 模式 ─────────────────────────────────────────────
     // controller 端只允许在 STAND/RESET 状态，或手柄已授权 SDK 模式时接受
-    // sdk_lcm_set_type_cmd。这里放在 STAND 成功之后，避免启动初期被拒绝。
+    // lcm_control_type。这里放在 STAND 成功之后，避免启动初期被拒绝。
     LOG(INFO) << "=== Step 3: Enter SDK mode ===";
     if (!g_running) {
         exit_code = 1;

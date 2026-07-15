@@ -86,7 +86,7 @@ bool SdkRobotManager::SendJointCmds(const std::vector<SdkJointCmd>& joint_cmds) 
         lcmt_joint_cmds.cmds[i] = lcmt_joint_cmd;
     }
 
-    bool ret = (0 == lcm_.publish("sdk_lcm_joint_cmds", &lcmt_joint_cmds));
+    bool ret = (0 == lcm_.publish("lcm_joint_cmd", &lcmt_joint_cmds));
     LOG(INFO) << "SendJointCmds, cmds size is " << joint_cmds.size() << ", ret=" << ret;
     return ret;
 }
@@ -99,7 +99,7 @@ bool SdkRobotManager::SendModeCmd(int mode) {
 
     sdk_lcmt_type mode_cmd;
     mode_cmd.controller_type = mode;
-    bool ret = (0 == lcm_.publish("sdk_lcm_set_type_cmd", &mode_cmd));
+    bool ret = (0 == lcm_.publish("lcm_control_type", &mode_cmd));
     LOG(INFO) << "SendModeCmd mode is " << mode;
     return ret;
 }
@@ -118,7 +118,7 @@ bool SdkRobotManager::SetJointDataCb(JointDateCb cb) {
     handle_func = [cb](const lcm::ReceiveBuffer* rbuf, const std::string& channel, const sdk_lcmt_joint_datasets* msg) {
         cb(msg);
     };
-    lcm_.subscribe("JointsData", handle_func);
+    lcm_.subscribe("lcm_joint_data", handle_func);
 
     LOG(INFO) << "set joint data callback success";
     return true;
@@ -138,7 +138,7 @@ bool SdkRobotManager::SetImuDataCb(ImuDateCb cb) {
     handle_func = [cb](const lcm::ReceiveBuffer* rbuf, const std::string& channel, const microstrain_lcmt* msg) {
         cb(msg);
     };
-    lcm_.subscribe("myIMU", handle_func);
+    lcm_.subscribe("lcm_imu_data", handle_func);
 
     LOG(INFO) << "set imu data callback success";
     return true;
