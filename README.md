@@ -106,6 +106,18 @@ bash config_network_lcm.sh wlp3s0
 
 Wi-Fi 链路可用于进入 DEBUG，也可用于进入 DEBUG 后运行同一套 SDK 关节控制脚本。它和网线链路的差异只在网络配置，不在 SDK topic/type 或脚本接口。
 
+也可以使用封装好的 smoke test 脚本。脚本会记录当前 Wi-Fi 连接，临时切到机器人热点，配置 LCM 组播；退出时会尽量先离开 DEBUG，再切回原 Wi-Fi：
+
+```bash
+bash scripts/nix_wifi_debug_smoke.sh --sn 005 --wifi-iface wlp3s0
+```
+
+默认脚本只验证 Wi-Fi 链路、进入 DEBUG 和关节反馈，不发关节命令。确认机器人支撑、急停和周围空间后，才使用最小 WAIST 当前位姿保持命令：
+
+```bash
+bash scripts/nix_wifi_debug_smoke.sh --sn 005 --wifi-iface wlp3s0 --control-waist-hold
+```
+
 真机测试前确认机器人端 `lumos_controller` 正在运行、急停可用、机器人支撑和周围空间安全。手柄可以用于进入 DEBUG；进入 DEBUG 后通过 SDK 做关节控制时，不要让手柄或其它控制源持续发送冲突命令。
 
 ## 编译
