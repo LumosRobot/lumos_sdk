@@ -109,8 +109,11 @@ Wi-Fi 链路可用于进入 DEBUG，也可用于进入 DEBUG 后运行同一套 
 也可以使用封装好的 smoke test 脚本。脚本会记录当前 Wi-Fi 连接，临时切到机器人热点，配置 LCM 组播；退出时会尽量先离开 DEBUG，再切回原 Wi-Fi：
 
 ```bash
+bash scripts/nix_wifi_debug_smoke.sh --sn 005 --wifi-iface wlp3s0 --diagnose-only
 bash scripts/nix_wifi_debug_smoke.sh --sn 005 --wifi-iface wlp3s0
 ```
+
+`--diagnose-only` 只检查 Wi-Fi、路由和被动 LCM 接收，不发送状态命令。只有被动 LCM 检查能看到 IMU/status/joint 流量时，脚本才会继续进入 DEBUG。
 
 默认脚本只验证 Wi-Fi 链路、进入 DEBUG 和关节反馈，不发关节命令。确认机器人支撑、急停和周围空间后，才使用最小 WAIST 当前位姿保持命令：
 

@@ -10,6 +10,7 @@
 # Usage:
 #   bash scripts/nix_wifi_debug_smoke.sh
 #   bash scripts/nix_wifi_debug_smoke.sh --sn 005 --wifi-iface wlp3s0
+#   bash scripts/nix_wifi_debug_smoke.sh --diagnose-only
 #   bash scripts/nix_wifi_debug_smoke.sh --control-waist-hold
 #   bash scripts/nix_wifi_debug_smoke.sh --no-restore-wifi
 #
@@ -29,13 +30,17 @@ ROBOT_PASSWORD=""
 WIFI_IFACE=""
 RESTORE_WIFI=1
 CONTROL_WAIST_HOLD=0
+DIAGNOSE_ONLY=0
+SKIP_PASSIVE_CHECK=0
 ENTER_TIMEOUT=25
 STAND_SETTLE=2
 FEEDBACK_TIMEOUT_MS=5000
+PASSIVE_CHECK_SECONDS=4
 RESTORE_CONN=""
 PYTHON_BIN=""
 ENTERED_DEBUG=0
 LEFT_DEBUG=0
+LCM_PASSIVE_LOG=""
 
 log() {
   printf '[wifi-debug-smoke] %s\n' "$*"
@@ -58,6 +63,7 @@ usage() {
     'Usage:' \
     '  bash scripts/nix_wifi_debug_smoke.sh' \
     '  bash scripts/nix_wifi_debug_smoke.sh --sn 005 --wifi-iface wlp3s0' \
+    '  bash scripts/nix_wifi_debug_smoke.sh --diagnose-only' \
     '  bash scripts/nix_wifi_debug_smoke.sh --control-waist-hold' \
     '  bash scripts/nix_wifi_debug_smoke.sh --no-restore-wifi' \
     '' \
@@ -97,6 +103,14 @@ while [[ $# -gt 0 ]]; do
       CONTROL_WAIST_HOLD=1
       shift
       ;;
+    --diagnose-only)
+      DIAGNOSE_ONLY=1
+      shift
+      ;;
+    --skip-passive-check)
+      SKIP_PASSIVE_CHECK=1
+      shift
+      ;;
     --enter-timeout)
       ENTER_TIMEOUT="${2:-}"
       shift 2
@@ -107,6 +121,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --feedback-timeout-ms)
       FEEDBACK_TIMEOUT_MS="${2:-}"
+      shift 2
+      ;;
+    --passive-check-seconds)
+      PASSIVE_CHECK_SECONDS="${2:-}"
       shift 2
       ;;
     -h|--help)
@@ -162,6 +180,7 @@ pick_python() {
 
 restore_wifi() {
   local status=$?
+  trap - EXIT INT TERM
   if [[ "$ENTERED_DEBUG" -eq 1 && "$LEFT_DEBUG" -eq 0 && -n "$PYTHON_BIN" ]]; then
     log "attempting to leave DEBUG before restoring Wi-Fi"
     "$PYTHON_BIN" "$SDK_ROOT/python/nix_debug_state.py" leave \
@@ -185,6 +204,51 @@ configure_lcm_route() {
   sudo ifconfig "$WIFI_IFACE" multicast || return 1
   sudo ip route del 224.0.0.0/4 dev lo 2>/dev/null || true
   sudo ip route replace 224.0.0.0/4 dev "$WIFI_IFACE" || return 1
+}
+
+print_network_diagnostics() {
+  log "diagnostic: active NetworkManager connections"
+  nmcli -t -f NAME,DEVICE,TYPE,STATE connection show --active || true
+
+  log "diagnostic: interface ${WIFI_IFACE}"
+  ip addr show "$WIFI_IFACE" || true
+
+  log "diagnostic: routes"
+  ip route show || true
+
+  log "diagnostic: multicast route lookup"
+  ip route get 239.255.76.67 || true
+
+  if [[ -n "$LCM_PASSIVE_LOG" && -f "$LCM_PASSIVE_LOG" ]]; then
+    log "diagnostic: passive LCM check log (${LCM_PASSIVE_LOG})"
+    tail -n 80 "$LCM_PASSIVE_LOG" || true
+  fi
+}
+
+passive_lcm_check() {
+  if [[ "$SKIP_PASSIVE_CHECK" -eq 1 ]]; then
+    log "passive LCM check skipped"
+    return 0
+  fi
+  if [[ ! -x "$SDK_ROOT/build/nix_lcm_sub" ]]; then
+    log "WARNING: build/nix_lcm_sub not found; run cmake --build build, or use --skip-passive-check"
+    return 0
+  fi
+
+  LCM_PASSIVE_LOG="$TMP_DIR/passive_lcm_check.log"
+  rm -f "$LCM_PASSIVE_LOG"
+  log "checking passive LCM receive for ${PASSIVE_CHECK_SECONDS}s before sending state commands"
+  timeout --preserve-status --signal=INT "${PASSIVE_CHECK_SECONDS}" \
+    "$SDK_ROOT/build/nix_lcm_sub" >"$LCM_PASSIVE_LOG" 2>&1 || true
+
+  if rg -q 'lcm_imu_data=[1-9][0-9]* msg/s|status=[1-9][0-9]* msg/s|lcm_joint_data=[1-9][0-9]* msg/s' "$LCM_PASSIVE_LOG"; then
+    log "passive LCM receive check passed"
+    return 0
+  fi
+
+  log "passive LCM receive check failed: no IMU/status/joint messages observed"
+  print_network_diagnostics
+  return 1
 }
 
 capture_feedback_csv() {
@@ -220,6 +284,8 @@ require_cmd awk
 require_cmd sudo
 require_cmd ifconfig
 require_cmd ip
+require_cmd rg
+require_cmd timeout
 
 detect_wifi_iface
 detect_restore_connection
@@ -242,6 +308,14 @@ TMP_DIR="$SDK_ROOT/build/wifi_debug_smoke"
 mkdir -p "$TMP_DIR"
 FEEDBACK_BEFORE="$TMP_DIR/feedback_before_debug.csv"
 FEEDBACK_DEBUG="$TMP_DIR/feedback_debug.csv"
+
+print_network_diagnostics
+passive_lcm_check || die "LCM traffic is not visible on robot Wi-Fi; not sending DEBUG command"
+
+if [[ "$DIAGNOSE_ONLY" -eq 1 ]]; then
+  log "--diagnose-only set; stopping before state commands"
+  exit 0
+fi
 
 log "entering DEBUG through lumos_sdk"
 "$PYTHON_BIN" "$SDK_ROOT/python/nix_debug_state.py" enter \

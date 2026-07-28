@@ -170,8 +170,11 @@ python3 python/nix_joint_cmd.py single --component WAIST --joint-id 0 --pos 0.0 
 也可以使用封装好的 smoke test 脚本。脚本会记录当前 Wi-Fi 连接，临时切到机器人热点，配置 LCM 组播；退出时会根据执行状态尽量先离开 DEBUG，再切回原 Wi-Fi：
 
 ```bash
+bash scripts/nix_wifi_debug_smoke.sh --sn 005 --wifi-iface wlp3s0 --diagnose-only
 bash scripts/nix_wifi_debug_smoke.sh --sn 005 --wifi-iface wlp3s0
 ```
+
+`--diagnose-only` 只检查 Wi-Fi、路由和被动 LCM 接收，不发送状态命令。只有被动 LCM 检查能看到 IMU/status/joint 流量时，脚本才会继续进入 DEBUG。
 
 默认脚本只验证 Wi-Fi 链路、进入 DEBUG 和关节反馈，不发关节命令。确认机器人支撑、急停和周围空间后，才使用最小 WAIST 当前位姿保持命令：
 
@@ -186,6 +189,8 @@ bash scripts/nix_wifi_debug_smoke.sh --sn 005 --wifi-iface wlp3s0 --control-wais
 | `--sn 005` | 自动生成 `nix_NIX005` 和 `nix_NIX005_pd` |
 | `--ssid` / `--password` | 覆盖自动生成的机器人热点名和密码 |
 | `--wifi-iface wlp3s0` | 指定本机 Wi-Fi 网卡 |
+| `--diagnose-only` | 只检查 Wi-Fi、路由和被动 LCM 接收，不发送状态或关节命令 |
+| `--skip-passive-check` | 跳过发送状态前的被动 LCM 检查；只在已确认 Wi-Fi 组播可用时使用 |
 | `--restore-connection` | 明确指定测试结束后要切回的 Wi-Fi 连接名 |
 | `--no-restore-wifi` | 测试结束后保留在机器人 Wi-Fi |
 | `--control-waist-hold` | 读取当前 WAIST[0] 位置并发送 0.2 秒保持命令 |
