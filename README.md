@@ -26,12 +26,18 @@ RESET(1) -> STAND(2) -> DEBUG(10) -> publish lcm_joint_cmd/joint_cmds_lcmt
 1. 手柄按键：`Back + Home`。
 2. 通过 `lumos_sdk` 发布状态命令切换到 `DEBUG(10)`，推荐使用 `python/nix_debug_state.py enter`。
 
+退出 DEBUG 也有两种方式：
+
+1. 手柄按键：`Start` 请求切到 `STAND`；双击 `Back` 请求切到 `RESET`。注意 `Home + Back` 是进入 DEBUG，不是退出。
+2. 通过 `lumos_sdk` 发布状态命令退出，推荐使用 `python/nix_debug_state.py leave` 切回 `STAND`；也可以用 `python/nix_robot_state.py state RESET --wait` 请求回 `RESET`。
+
 从 `lumos_controller` 当前 NIX2 配置确认，进入 DEBUG 有状态机前提：
 
 - 只允许从 `RESET` 或 `STAND` 转到 `DEBUG`。
 - 不能从 `NOT_A_STATE`、`RL_WALK`、`RL_WALK_AMP`、`MIMIC`、`RL_LIEDOWN` 等状态直接进入 DEBUG；需要先按允许路径回到 `RESET` 或 `STAND`。
 - 通过 `lcm_robot_cmd` 切状态时，`x/y/yaw` 必须为 0；带速度的消息只作为速度命令处理，不触发状态切换。
 - `DebugState` 进入后默认保持当前关节位置，不会自动插值到站姿；所以建议先完成 `RESET -> STAND` 并确认机器人稳定，再进入 DEBUG。
+- NIX2 配置允许从 `DEBUG` 退出到 `STAND` 或 `RESET`。手柄 `Start` 和双击 `Back`、SDK `leave/state` 命令都会走同一套状态转移检查。
 
 进入 DEBUG 后，SDK 关节控制可以走两种网络链路。两种链路使用同一套 LCM topic/type 和同一套脚本，不需要维护两套控制代码：
 

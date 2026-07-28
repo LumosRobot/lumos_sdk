@@ -30,6 +30,14 @@ RESET(1) -> STAND(2) -> DEBUG(10) -> publish lcm_joint_cmd/joint_cmds_lcmt
 | 手柄 `Back + Home` | 可用 | 由手柄直接触发进入 DEBUG |
 | `lumos_sdk` 状态命令 | 可用 | 推荐使用 `python/nix_debug_state.py enter`，会执行 `RESET -> STAND -> DEBUG` 并等待 status 确认 |
 
+退出 `DEBUG(10)` 也有两种方式：
+
+| 方式 | 当前状态 | 说明 |
+| --- | --- | --- |
+| 手柄 `Start` | 可用 | 请求从 DEBUG 切到 `STAND` |
+| 手柄双击 `Back` | 可用 | 请求从 DEBUG 切到 `RESET`；单按 Back 只是第一次 RESET 按键记录，`Home + Back` 是进入 DEBUG |
+| `lumos_sdk` 状态命令 | 可用 | 推荐使用 `python/nix_debug_state.py leave` 切回 `STAND`；也可以用 `python/nix_robot_state.py state RESET --wait` 请求回 `RESET` |
+
 从 `lumos_controller` 当前 NIX2 配置确认，进入 DEBUG 的状态机前提是：
 
 | 当前状态 | 是否可直接进入 DEBUG | 说明 |
@@ -47,6 +55,7 @@ RESET(1) -> STAND(2) -> DEBUG(10) -> publish lcm_joint_cmd/joint_cmds_lcmt
 - 手柄 `Back + Home` 也会走相同的状态转移检查，不会绕过 `safe_to_go`。
 - `DebugState::onEnter()` 会把当前关节位置作为保持目标，不会自动插值到站姿。因此真机建议先完成 `RESET -> STAND`，确认机器人稳定，再进入 DEBUG。
 - 进入 DEBUG 后才会执行 `lcm_joint_cmd/joint_cmds_lcmt` 关节命令，并发布聚合 `lcm_joint_data/joint_datasets_lcmt`。
+- NIX2 配置中 `DEBUG` 只允许转到 `RESET` 或 `STAND`。手柄 `Start`、双击 `Back` 和 SDK 状态命令都会走同一套 `safe_to_go` 检查。
 
 ## 2. 网络配置
 
