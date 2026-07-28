@@ -2,23 +2,23 @@
 # -*- coding: utf-8 -*-
 """NIX joint-data LCM subscriber.
 
-这个脚本只做一件事：监听 NIX 控制器发布的 ``JointsData`` LCM 频道，
-把 ``sdk_lcmt_joint_datasets`` 解码成 Python 里的关节样本，并可选写成
+这个脚本只做一件事：监听 NIX 控制器发布的 ``lcm_joint_data`` LCM 频道，
+把 ``joint_datasets_lcmt`` 解码成 Python 里的关节样本，并可选写成
 feedback CSV。
 
 常用命令：
 
-    # 连续监听 10 秒，收到消息就打印前 12 个关节
+    # 连续监听 10 秒，默认每 100 包打印一次，避免真机 100Hz 反馈刷屏
     python3 lumos_sdk/python/nix_lcm_sub.py --duration 10
 
-    # 等到收到第一帧 JointsData 后退出；如果机器人没发数据，会一直等
+    # 等到收到第一帧 lcm_joint_data 后退出；如果机器人没发数据，会一直等
     python3 lumos_sdk/python/nix_lcm_sub.py --once
 
     # 采 10 秒并写成当前 pipeline 能读取的 feedback CSV 列名
     python3 lumos_sdk/python/nix_lcm_sub.py --duration 10 --csv build/nix_feedback.csv
 
     # 真机验证：打印完整一帧 21 个关节，确认不是只收到部分肢体
-    python3 lumos_sdk/python/nix_lcm_sub.py --duration 2 --print-limit 21
+    python3 lumos_sdk/python/nix_lcm_sub.py --once --print-limit 21
 
     # 真机采集：降低打印频率，同时保存 CSV
     python3 lumos_sdk/python/nix_lcm_sub.py \
@@ -57,7 +57,8 @@ feedback CSV。
 
 注意：
     - ``--once`` 不是“尝试一次”。它是“收到第一条消息后退出”。
-    - 如果控制器没有进入会发布 ``JointsData`` 的状态，脚本不会有样本输出。
+    - 当前 lumos_controller 只在 DEBUG(10) 状态发布聚合 ``lcm_joint_data``，
+      如果未进入 DEBUG，脚本不会有样本输出。
     - 如果 Ctrl+C 时 LCM 抛 ``lcm_handle_timeout() returned -1``，这里会把它
       当作干净退出处理，不再打印 Python traceback。
 """
@@ -87,7 +88,7 @@ class LcmUnavailableError(RuntimeError):
 
 @dataclass(frozen=True)
 class NixJointSample:
-    """One decoded joint feedback sample from ``sdk_lcmt_joint_data``."""
+    """One decoded joint feedback sample from ``joint_data_lcmt``."""
 
     timestamp: float
     component_type: int
@@ -209,11 +210,11 @@ def _load_lcm_class(modname: str):
 
 
 def load_joint_dataset_type():
-    """Return the generated ``sdk_lcmt_joint_datasets`` class."""
+    """Return the generated ``joint_datasets_lcmt`` class."""
 
     try:
-        _load_lcm_class("sdk_lcmt_joint_data")
-        return _load_lcm_class("sdk_lcmt_joint_datasets")
+        _load_lcm_class("joint_data_lcmt")
+        return _load_lcm_class("joint_datasets_lcmt")
     except Exception as exc:  # pragma: no cover - exact import errors vary.
         raise LcmUnavailableError(
             "Failed to load generated LCM typedefs from "
@@ -230,17 +231,17 @@ def load_lcm_module():
         raise LcmUnavailableError(
             "Python LCM binding is not available. Install/build the lcm Python "
             "package, or use the shell-out fallback: lumos_sdk/build/"
-            "nix_recv_all_data."
+            "nix_lcm_sub.cpp."
         ) from exc
 
 
 class NixLcmSubscriber:
-    """Thin subscriber for NIX ``JointsData`` feedback.
+    """Thin subscriber for NIX ``lcm_joint_data`` feedback.
 
     这个类是给代码复用/测试用的；命令行入口在文件底部的 ``main()``。
 
     数据流：
-        LCM bytes -> sdk_lcmt_joint_datasets.decode()
+        LCM bytes -> joint_datasets_lcmt.decode()
                   -> NixJointSample list
                   -> callback / CSV writer / stdout printer
     """
@@ -263,7 +264,7 @@ class NixLcmSubscriber:
                 "Failed to create LCM subscriber for "
                 f"{self.lcm_url}. Check multicast routing/network setup, try "
                 "--local for same-machine loopback tests, or use "
-                "lumos_sdk/build/nix_recv_all_data."
+                "lumos_sdk/build/nix_lcm_sub."
             ) from exc
         self._subscription = None
         self._callback: Optional[JointCallback] = None
@@ -331,9 +332,9 @@ class NixLcmSubscriber:
     def _handle_message(self, channel: str, data: bytes) -> None:
         """Decode one raw LCM packet.
 
-        ``sdk_lcmt_joint_datasets`` 是一个数组消息：
+        ``joint_datasets_lcmt`` 是一个数组消息：
             msg.datasets_num 表示数组里有多少个关节
-            msg.datasets[i] 是单个 sdk_lcmt_joint_data
+            msg.datasets[i] 是单个 joint_data_lcmt
 
         真正的字段名是 pos_high / vel / tor，不是 position / velocity / torque。
         """
@@ -420,7 +421,7 @@ def _print_samples(samples: Sequence[NixJointSample], limit: int) -> None:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Subscribe to NIX JointsData LCM feedback.",
+        description="Subscribe to NIX lcm_joint_data feedback.",
     )
     parser.add_argument("--channel", default=DEFAULT_JOINT_CHANNEL)
     parser.add_argument("--url", default=None, help="Explicit LCM URL. Defaults to the SDK URL with ttl=255.")
@@ -429,7 +430,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--once", action="store_true", help="Exit after the first decoded message.")
     parser.add_argument("--timeout-ms", type=int, default=200)
     parser.add_argument("--csv", default=None, help="Optional feedback CSV output path.")
-    parser.add_argument("--print-every", type=int, default=1, help="Print every N decoded messages.")
+    parser.add_argument("--print-every", type=int, default=100, help="Print every N decoded messages.")
     parser.add_argument("--print-limit", type=int, default=12, help="Max samples printed per message.")
     parser.add_argument("--quiet", action="store_true")
     return parser
@@ -448,7 +449,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     def on_message(channel: str, _msg: object, samples: List[NixJointSample]) -> None:
         if args.csv:
             write_feedback_rows(args.csv, (sample.feedback_row() for sample in samples))
-        if not args.quiet and subscriber.message_count % max(args.print_every, 1) == 0:
+        should_print = args.once or subscriber.message_count % max(args.print_every, 1) == 0
+        if not args.quiet and should_print:
             print(
                 f"[{channel}] messages={subscriber.message_count} "
                 f"samples={len(samples)} total_samples={subscriber.sample_count}"

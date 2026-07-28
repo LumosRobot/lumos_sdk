@@ -2,14 +2,14 @@
 # -*- coding: utf-8 -*-
 """NIX 关节指令下发工具。
 
-这个脚本通过 LCM 发布 ``sdk_lcmt_joint_cmds``，用于替代
-``example/nix_cmd_all_joints.cpp`` 中依赖宏切换的常用关节测试流程。
+这个脚本通过 LCM 发布 ``joint_cmds_lcmt``，用于替代
+``example/nix_joint_cmd.cpp`` 中依赖宏切换的常用关节测试流程。
 所有控制目标都通过命令行、CSV 或模型参考动作文件在运行时指定，不需要重新编译。
 
 安全边界：
-    - 本脚本只发布关节指令，不负责进入或退出 SDK 模式。
-    - 使用前先让机器人进入 RESET/STAND，并进入 SDK 模式，例如：
-      ``python3 lumos_sdk/python/sdk_debug.py mode 1``。
+    - 本脚本只发布关节指令，不负责进入或退出 DEBUG 状态。
+    - 使用前先让机器人进入 RESET/STAND/DEBUG，例如：
+      ``python3 lumos_sdk/python/nix_debug_state.py enter --timeout 15``。
     - 第一次操作必须先加 ``--dry-run``，确认 component、joint_id、目标位置和增益。
     - 真机发布时从小幅度、短时间、单关节开始，不要直接回放长动作。
 
@@ -67,7 +67,7 @@ COMPONENTS = {
 }
 COMPONENT_NAMES = {value: key for key, value in COMPONENTS.items()} 
 
-# SDK 下发顺序与 nix_cmd_all_joints.cpp 保持一致：
+# SDK 下发顺序与 nix_joint_cmd.cpp 保持一致：
 # LEG_L(6), LEG_R(6), WAIST(1), ARM_L(4), ARM_R(4)。
 GLOBAL_JOINTS: Tuple[Tuple[str, int], ...] = (
     ("LEG_L", 0), ("LEG_L", 1), ("LEG_L", 2), ("LEG_L", 3), ("LEG_L", 4), ("LEG_L", 5),
@@ -77,7 +77,7 @@ GLOBAL_JOINTS: Tuple[Tuple[str, int], ...] = (
     ("ARM_R", 0), ("ARM_R", 1), ("ARM_R", 2), ("ARM_R", 3),
 )
 
-# 从 example/nix_cmd_all_joints.cpp CONTROL_REPLAY 移植的映射。
+# 从 example/nix_joint_cmd.cpp CONTROL_REPLAY 移植的映射。
 # 每项为 (组件名, 组件内 joint_id, store_ref_motion.txt 中的位置列)。
 REPLAY_MAPPING: Tuple[Tuple[str, int, int], ...] = (
     ("LEG_L", 0, 12), ("LEG_L", 1, 16), ("LEG_L", 2, 14), ("LEG_L", 3, 18), ("LEG_L", 4, 20), ("LEG_L", 5, 22),
@@ -113,7 +113,7 @@ NIX2_LEG_LIMITS: dict = {
 class JointTarget:
     """一个 SDK 关节指令目标。
 
-    ``kp`` 和 ``kd`` 分别写入 ``sdk_lcmt_joint_cmd`` 的 ``res1`` 和 ``res2``。
+    ``kp`` 和 ``kd`` 分别写入 ``joint_cmd_lcmt`` 的 ``res1`` 和 ``res2``。
     ``ctrl_word=3`` 是现有 SDK 示例常用的 MIT/PD 控制路径；``ctrl_word=200``
     是复位语义，不要在普通动作测试里随意使用。
     """
@@ -165,7 +165,7 @@ def _load_lcm_class(modname: str):
 
 
 def load_lcm_runtime():
-    """返回 ``(lcm_module, sdk_lcmt_joint_cmd, sdk_lcmt_joint_cmds)``。
+    """返回 ``(lcm_module, joint_cmd_lcmt, joint_cmds_lcmt)``。
 
     LCM 相关导入刻意延迟到真正发布时执行，这样没有安装 Python LCM 绑定的机器
     也可以运行 ``--help`` 和 ``--dry-run``。
@@ -178,8 +178,8 @@ def load_lcm_runtime():
             "Python LCM binding 不可用。请安装/编译 lcm Python 包，"
             "或先使用 --dry-run 只检查指令内容。"
         ) from exc
-    joint_cmd = _load_lcm_class("sdk_lcmt_joint_cmd")
-    joint_cmds = _load_lcm_class("sdk_lcmt_joint_cmds")
+    joint_cmd = _load_lcm_class("joint_cmd_lcmt")
+    joint_cmds = _load_lcm_class("joint_cmds_lcmt")
     return lcm_mod, joint_cmd, joint_cmds
 
 
@@ -355,7 +355,7 @@ def replay_targets_from_frame(frame: Sequence[float], kps: Sequence[float], kds:
 
 
 def build_lcm_message(targets: Sequence[JointTarget], joint_cmd_cls, joint_cmds_cls):
-    """把 ``JointTarget`` 列表转换成一个 ``sdk_lcmt_joint_cmds`` 包。"""
+    """把 ``JointTarget`` 列表转换成一个 ``joint_cmds_lcmt`` 包。"""
 
     msg = joint_cmds_cls()
     msg.cmds_num = len(targets)
@@ -542,7 +542,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         epilog=(
             "全局索引顺序：0-5 LEG_L，6-11 LEG_R，12 WAIST，"
             "13-16 ARM_L，17-20 ARM_R。\n"
-            "安全建议：真机发布前先使用 --dry-run；发布前确认机器人已进入 SDK 模式。"
+            "安全建议：真机发布前先使用 --dry-run；发布前确认机器人已进入 DEBUG(10)。"
         ),
     )
     localize_argparse(parser)
@@ -697,7 +697,7 @@ def cmd_sine_sweep(args: argparse.Namespace) -> int:
 
     sub.listen(once=True, timeout_ms=500, duration_sec=10.0)
     if sub.message_count == 0:
-        print("错误：10 秒内未收到 JointsData，检查机器人是否在线", file=sys.stderr)
+        print("错误：10 秒内未收到 lcm_joint_data，检查机器人是否在线", file=sys.stderr)
         return 3
 
     # 从收到的第一帧中找到指定关节

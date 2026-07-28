@@ -51,8 +51,14 @@ import time
 import threading
 
 import numpy as np
-import onnxruntime
-import yaml
+try:
+    import onnxruntime
+except ImportError:
+    onnxruntime = None
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 # ── LCM 类型加载 ─────────────────────────────────────────────────
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -70,11 +76,11 @@ def _load_lcm_class(modname: str):
     return cls
 
 
-sdk_lcmt_joint_cmd      = _load_lcm_class("sdk_lcmt_joint_cmd")
-sdk_lcmt_joint_data     = _load_lcm_class("sdk_lcmt_joint_data")
-sdk_lcmt_joint_cmds     = _load_lcm_class("sdk_lcmt_joint_cmds")
-sdk_lcmt_joint_datasets = _load_lcm_class("sdk_lcmt_joint_datasets")
-microstrain_lcmt        = _load_lcm_class("microstrain_lcmt")
+joint_cmd_lcmt      = _load_lcm_class("joint_cmd_lcmt")
+joint_data_lcmt     = _load_lcm_class("joint_data_lcmt")
+joint_cmds_lcmt     = _load_lcm_class("joint_cmds_lcmt")
+joint_datasets_lcmt = _load_lcm_class("joint_datasets_lcmt")
+imu_data_lcmt           = _load_lcm_class("imu_data_lcmt")
 
 
 # ── 常量 ─────────────────────────────────────────────────────────
@@ -168,8 +174,8 @@ class RobotState:
 
 
 def setup_lcm(lc, state: RobotState):
-    lc.subscribe(CH_IMU,        lambda ch, data: state.update_imu(microstrain_lcmt.decode(data)))
-    lc.subscribe(CH_JOINT_DATA, lambda ch, data: state.update_joint(sdk_lcmt_joint_datasets.decode(data)))
+    lc.subscribe(CH_IMU,        lambda ch, data: state.update_imu(imu_data_lcmt.decode(data)))
+    lc.subscribe(CH_JOINT_DATA, lambda ch, data: state.update_joint(joint_datasets_lcmt.decode(data)))
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -298,12 +304,12 @@ def build_observation(omega, proj_gravity,
 # 关节指令下发（robot/xml 顺序）
 # ═══════════════════════════════════════════════════════════════════
 def send_joint_targets(lc, joint_names, target_pos, kp, kd):
-    cmds = sdk_lcmt_joint_cmds()
+    cmds = joint_cmds_lcmt()
     cmds.cmds_num = len(joint_names)
     cmds.cmds = []
     for i, name in enumerate(joint_names):
         ctype, jid = JOINT_NAME_TO_SDK[name]
-        c = sdk_lcmt_joint_cmd()
+        c = joint_cmd_lcmt()
         c.component_type = ctype
         c.joint_id       = jid
         c.ctrlWord       = 3
@@ -323,6 +329,15 @@ def send_joint_targets(lc, joint_names, target_pos, kp, kd):
 # 主流程
 # ═══════════════════════════════════════════════════════════════════
 def run(model_dir, start_frame=0, end_frame=-1, loop_motion=False, dry_run=False):
+    if onnxruntime is None or yaml is None:
+        missing = []
+        if onnxruntime is None:
+            missing.append("onnxruntime")
+        if yaml is None:
+            missing.append("PyYAML")
+        print(f"[ERROR] 缺少 Python 依赖: {', '.join(missing)}。请先安装后再运行 mimic 策略回放。")
+        return
+
     # ── 解析路径 ────────────────────────────────────────────────
     p_joint_names = os.path.join(model_dir, "joint_names.yaml")
     p_kp_kd       = os.path.join(model_dir, "kp_kd.yaml")
@@ -404,7 +419,7 @@ def run(model_dir, start_frame=0, end_frame=-1, loop_motion=False, dry_run=False
     state = RobotState()
     setup_lcm(lc, state)
 
-    print("[INFO] Waiting for IMU + JointsData ...")
+    print("[INFO] Waiting for IMU + lcm_joint_data ...")
     t0 = time.time()
     while time.time() - t0 < 5.0:
         lc.handle_timeout(10)
@@ -418,7 +433,7 @@ def run(model_dir, start_frame=0, end_frame=-1, loop_motion=False, dry_run=False
     if dry_run:
         print("[WARN] DRY-RUN: 仅推理策略，不下发关节指令")
     else:
-        print("[WARN] 即将下发关节指令，请确认机器人已 STAND 且进入 SDK 模式。3s 后开始 ...")
+        print("[WARN] 即将下发关节指令，请确认机器人已 STAND 且进入 DEBUG 状态。3s 后开始 ...")
         time.sleep(3.0)
 
     # ── 控制循环（与 sim2real_lumos.py 相同的时间门 + LCM 紧循环范式）──

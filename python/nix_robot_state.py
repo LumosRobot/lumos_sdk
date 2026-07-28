@@ -5,19 +5,19 @@
 这个脚本负责发布机器人高层状态命令，并可订阅 ``lcm_robot_status`` 等待
 真实状态确认。它和 ``nix_joint_cmd.py`` 的边界不同：
 
-    - ``nix_robot_state.py`` 管 RESET/STAND/RL 等高层状态。
-    - ``nix_joint_cmd.py`` 管 SDK 关节级 ``sdk_lcmt_joint_cmds``。
+    - ``nix_robot_state.py`` 管 RESET/STAND/DEBUG/RL 等高层状态。
+    - ``nix_joint_cmd.py`` 管 controller DEBUG 状态下的关节级 ``joint_cmds_lcmt``。
 
 为什么需要它：
-    ``sdk_debug.py state 2`` 只能发出 STAND 命令，不能证明机器人已经进入
-    ``STAND(2)``。本脚本会在发送命令后持续处理 LCM status，直到看到目标
+    只发布一次状态命令不能证明机器人已经进入目标状态。本脚本会在发送命令后
+    持续处理 LCM status，直到看到目标
     状态或超时失败，适合写进 Phase 1 采集 runbook。
 
 常用示例：
     # 只打印将要执行的 RESET -> STAND 流程，不发布 LCM。
     python3 lumos_sdk/python/nix_robot_state.py stand --dry-run
 
-    # RESET 后等待 RESET(1)，再 STAND 并等待 STAND(2)，最后进入 SDK 模式。
+    # RESET 后等待 RESET(1)，再 STAND 并等待 STAND(2)，最后进入 DEBUG(10)。
     python3 lumos_sdk/python/nix_robot_state.py stand --timeout 15
 
     # 只发送并等待某个状态，例如 STAND。
@@ -27,7 +27,10 @@
     python3 lumos_sdk/python/nix_robot_state.py listen --duration 10
 
 安全边界：
-    - 默认 ``stand`` 会先确认 RESET/STAND，再发送 SDK 模式切换。
+    - 默认 ``stand`` 会先确认 RESET/STAND，再切入 DEBUG(10) 关节调试状态。
+    - ``state STATE --wait`` 依赖 controller 发布 ``lcm_robot_status``。如果机器人
+      已经处在同一个 STATE，controller 可能不会重复发布状态确认；真机 smoke
+      test 优先使用 ``stand`` 或 ``nix_debug_state.py enter/leave``。
     - 本脚本不会发布任何关节 PD 目标。
     - 真机使用前先确认机器人周围安全、急停可用、controller 正常运行。
     - 如果等待超时，不要继续采集或下发关节命令；先检查 status 频道和机器人状态。
@@ -47,14 +50,8 @@ from typing import Optional, Sequence
 DEFAULT_LCM_URL = "udpm://239.255.76.67:7667?ttl=255"
 LOCAL_LCM_URL = "udpm://239.255.76.67:7667?ttl=0"
 
-CH_MODE_CMD = "lcm_control_type"
 CH_ROBOT_CMD = "lcm_robot_cmd"
 CH_STATUS = "lcm_robot_status"
-
-CONTROLLER_TYPES = {
-    "RL": 0,
-    "SDK": 1,
-}
 
 STATE_TYPES = {
     "NOT_A_STATE": 0,
@@ -63,6 +60,7 @@ STATE_TYPES = {
     "RL_WALK": 3,
     "RL_LIEDOWN": 5,
     "RL_MIMIC": 6,
+    "DEBUG": 10,
     "RL_NAV": 11,
     "RL_WALK_AMP": 12,
     "BY_MIMIC": 20,
@@ -112,7 +110,7 @@ def _load_lcm_class(modname: str):
 
 
 def load_lcm_runtime():
-    """返回 ``(lcm_module, sdk_lcmt_type, robot_cmd_lcmt, robot_status_lcmt)``。
+    """返回 ``(lcm_module, robot_cmd_lcmt, robot_status_lcmt)``。
 
     LCM 导入延迟到真正发布/订阅时执行，保证 ``--help`` 和 ``--dry-run`` 不依赖
     机器人现场环境。
@@ -125,27 +123,9 @@ def load_lcm_runtime():
             "Python LCM binding 不可用。请安装/编译 lcm Python 包，"
             "或使用 --dry-run 只检查将要发送的状态命令。"
         ) from exc
-    mode_cls = _load_lcm_class("sdk_lcmt_type")
     robot_cmd_cls = _load_lcm_class("robot_cmd_lcmt")
     status_cls = _load_lcm_class("robot_status_lcmt")
-    return lcm_mod, mode_cls, robot_cmd_cls, status_cls
-
-
-def parse_controller_type(value: str) -> int:
-    """解析 controller type 名称或数字。"""
-
-    raw = str(value).strip()
-    key = raw.upper()
-    if key in CONTROLLER_TYPES:
-        return CONTROLLER_TYPES[key]
-    try:
-        controller_type = int(raw)
-    except ValueError as exc:
-        valid = ", ".join(CONTROLLER_TYPES)
-        raise argparse.ArgumentTypeError(f"未知 controller type {value!r}；应为 {valid} 或数字") from exc
-    if controller_type not in CONTROLLER_TYPES.values():
-        raise argparse.ArgumentTypeError(f"未知 controller type 数字：{controller_type}")
-    return controller_type
+    return lcm_mod, robot_cmd_cls, status_cls
 
 
 def parse_state(value: str) -> int:
@@ -169,14 +149,12 @@ class RobotStateClient:
     """NIX 高层状态 LCM 客户端。
 
     这个类封装三件事：
-        1. 发布 SDK/RL controller type。
-        2. 发布 RESET/STAND/RL 等机器人状态命令。
-        3. 订阅 ``lcm_robot_status`` 并等待目标状态。
+        1. 发布 RESET/STAND/DEBUG/RL 等机器人状态命令。
+        2. 订阅 ``lcm_robot_status`` 并等待目标状态。
     """
 
     def __init__(self, lcm_url: str = DEFAULT_LCM_URL) -> None:
-        lcm_mod, mode_cls, robot_cmd_cls, status_cls = load_lcm_runtime()
-        self._mode_cls = mode_cls
+        lcm_mod, robot_cmd_cls, status_cls = load_lcm_runtime()
         self._robot_cmd_cls = robot_cmd_cls
         self._status_cls = status_cls
         self._lc = lcm_mod.LCM(lcm_url)
@@ -192,13 +170,6 @@ class RobotStateClient:
             controller_type=int(msg.type),
             received_at=time.time(),
         )
-
-    def publish_mode(self, controller_type: int) -> None:
-        """发布 SDK/RL controller type 切换命令。"""
-
-        msg = self._mode_cls()
-        msg.controller_type = int(controller_type)
-        self._lc.publish(CH_MODE_CMD, msg.encode())
 
     def publish_state(self, state: int, vx: float = 0.0, vy: float = 0.0, vyaw: float = 0.0) -> None:
         """发布机器人高层状态命令。"""
@@ -262,37 +233,12 @@ def state_name(state: int) -> str:
     return STATE_NAMES.get(state, f"UNKNOWN_{state}")
 
 
-def controller_type_name(controller_type: int) -> str:
-    """返回 controller type 名称。"""
-
-    for name, value in CONTROLLER_TYPES.items():
-        if value == controller_type:
-            return name
-    return f"UNKNOWN_{controller_type}"
-
-
 def cmd_list(_args: argparse.Namespace) -> int:
-    """打印可用状态码和 controller type。"""
+    """打印可用状态码。"""
 
-    print("Controller types:")
-    for name, value in CONTROLLER_TYPES.items():
-        print(f"  {name:<4} {value}")
-    print("\nRobot states:")
+    print("Robot states:")
     for name, value in STATE_TYPES.items():
         print(f"  {name:<12} {value}")
-    return 0
-
-
-def cmd_mode(args: argparse.Namespace) -> int:
-    """发布 SDK/RL controller type 切换命令。"""
-
-    controller_type = args.controller_type
-    print(f"发送 mode={controller_type_name(controller_type)}({controller_type})")
-    if args.dry_run:
-        print("dry-run：不发布 LCM")
-        return 0
-    client = RobotStateClient(lcm_url_from_args(args))
-    client.publish_mode(controller_type)
     return 0
 
 
@@ -312,16 +258,14 @@ def cmd_state(args: argparse.Namespace) -> int:
 
 
 def cmd_stand(args: argparse.Namespace) -> int:
-    """执行安全站立准备流程：RESET、STAND，然后可选进入 SDK。"""
+    """执行安全站立准备流程：RESET、STAND，然后可选进入 DEBUG。"""
 
     steps = []
-    if args.enter_sdk and args.sdk_before_stand:
-        steps.append(f"mode SDK({CONTROLLER_TYPES['SDK']})")
     if not args.skip_reset:
         steps.append(f"state RESET({STATE_TYPES['RESET']}) 并等待确认")
     steps.append(f"state STAND({STATE_TYPES['STAND']}) 并等待确认")
-    if args.enter_sdk and not args.sdk_before_stand:
-        steps.append(f"mode SDK({CONTROLLER_TYPES['SDK']})")
+    if args.enter_debug:
+        steps.append(f"state DEBUG({STATE_TYPES['DEBUG']}) 并等待确认")
     print("计划执行：")
     for step in steps:
         print(f"  - {step}")
@@ -330,11 +274,6 @@ def cmd_stand(args: argparse.Namespace) -> int:
         return 0
 
     client = RobotStateClient(lcm_url_from_args(args))
-    if args.enter_sdk and args.sdk_before_stand:
-        client.publish_mode(CONTROLLER_TYPES["SDK"])
-        print("已发送：mode SDK(1)")
-        time.sleep(max(args.mode_settle, 0.0))
-
     if not args.skip_reset:
         client.publish_state(STATE_TYPES["RESET"])
         print("已发送：state RESET(1)")
@@ -349,10 +288,11 @@ def cmd_stand(args: argparse.Namespace) -> int:
     if args.stand_settle > 0:
         print(f"等待站稳：{args.stand_settle:g}s")
         time.sleep(args.stand_settle)
-    if args.enter_sdk and not args.sdk_before_stand:
-        client.publish_mode(CONTROLLER_TYPES["SDK"])
-        print("已发送：mode SDK(1)")
-        time.sleep(max(args.mode_settle, 0.0))
+    if args.enter_debug:
+        client.publish_state(STATE_TYPES["DEBUG"])
+        print("已发送：state DEBUG(10)")
+        debug_status = client.wait_for_state(STATE_TYPES["DEBUG"], timeout=args.timeout)
+        print(f"已确认：{debug_status.summary()}")
     return 0
 
 
@@ -396,25 +336,21 @@ def build_arg_parser() -> argparse.ArgumentParser:
         epilog=(
             "推荐采集前流程：\n"
             "  python3 lumos_sdk/python/nix_robot_state.py stand --timeout 15 --stand-settle 10\n"
-            "成功标志：输出“已确认：state=STAND(2)”和“已发送：mode SDK(1)”。"
+            "成功标志：输出“已确认：state=STAND(2)”和“已确认：state=DEBUG(10)”。\n"
+            "注意：state STATE --wait 在目标状态未变化时可能等不到新的 status；"
+            "真机 smoke test 优先使用 stand。"
         ),
     )
     localize_argparse(parser)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_list = sub.add_parser("list", help="打印可用状态码和 controller type")
+    p_list = sub.add_parser("list", help="打印可用状态码")
     localize_argparse(p_list)
     p_list.set_defaults(func=cmd_list)
 
-    p_mode = sub.add_parser("mode", help="切换 SDK/RL controller type")
-    localize_argparse(p_mode)
-    p_mode.add_argument("controller_type", type=parse_controller_type, metavar="TYPE", help="SDK/RL 或 1/0")
-    add_lcm_args(p_mode)
-    p_mode.set_defaults(func=cmd_mode)
-
     p_state = sub.add_parser("state", help="发送一个机器人状态命令")
     localize_argparse(p_state)
-    p_state.add_argument("state", type=parse_state, metavar="STATE", help="状态名或状态码，例如 RESET/STAND/1/2")
+    p_state.add_argument("state", type=parse_state, metavar="STATE", help="状态名或状态码，例如 RESET/STAND/DEBUG/1/2/10")
     p_state.add_argument("--wait", action="store_true", help="等待 lcm_robot_status 到达目标状态")
     p_state.add_argument("--timeout", type=float, default=15.0, help="等待目标状态的超时时间，单位秒")
     p_state.add_argument("--vx", type=float, default=0.0, help="x 方向速度命令，用于 RL_WALK/RL_WALK_AMP")
@@ -423,16 +359,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     add_lcm_args(p_state)
     p_state.set_defaults(func=cmd_state)
 
-    p_stand = sub.add_parser("stand", help="执行 RESET -> STAND，确认后进入 SDK")
+    p_stand = sub.add_parser("stand", help="执行 RESET -> STAND，确认后进入 DEBUG")
     localize_argparse(p_stand)
-    p_stand.add_argument("--no-enter-sdk", dest="enter_sdk", action="store_false", help="确认 STAND 后不自动发送 mode SDK(1)")
-    p_stand.add_argument("--sdk-before-stand", action="store_true", help="兼容旧流程：先发送 mode SDK，再 RESET/STAND")
+    p_stand.add_argument("--no-enter-debug", "--no-enter-sdk", dest="enter_debug", action="store_false", help="确认 STAND 后不自动进入 DEBUG(10)")
     p_stand.add_argument("--skip-reset", action="store_true", help="跳过 RESET，直接发送 STAND 并等待确认")
     p_stand.add_argument("--timeout", type=float, default=15.0, help="每个状态等待确认的超时时间，单位秒")
-    p_stand.add_argument("--mode-settle", type=float, default=0.2, help="发送 mode SDK 前后等待时间，单位秒")
     p_stand.add_argument("--reset-settle", type=float, default=3.0, help="确认 RESET 后等待时间，单位秒")
     p_stand.add_argument("--stand-settle", type=float, default=0.0, help="确认 STAND 后继续等待站稳时间，单位秒")
-    p_stand.set_defaults(enter_sdk=True)
+    p_stand.set_defaults(enter_debug=True)
     add_lcm_args(p_stand)
     p_stand.set_defaults(func=cmd_stand)
 

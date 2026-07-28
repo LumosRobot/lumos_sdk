@@ -8,6 +8,10 @@ from io import BytesIO
 import struct
 
 class lumos_lcm_control(object):
+    """
+    DEPRECATED: use robot_cmd_lcmt instead (topic: lcm_robot_cmd)
+    NOTE: robot_cmd_lcmt has int8_t policy_type instead of boolean upstate
+    """
 
     __slots__ = ["state", "x", "y", "yaw", "upstate"]
 

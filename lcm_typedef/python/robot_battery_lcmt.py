@@ -7,7 +7,7 @@ DO NOT MODIFY BY HAND!!!!
 from io import BytesIO
 import struct
 
-class lumos_lcm_battery(object):
+class robot_battery_lcmt(object):
 
     __slots__ = ["voltage", "current", "percentage"]
 
@@ -25,7 +25,7 @@ class lumos_lcm_battery(object):
 
     def encode(self):
         buf = BytesIO()
-        buf.write(lumos_lcm_battery._get_packed_fingerprint())
+        buf.write(robot_battery_lcmt._get_packed_fingerprint())
         self._encode_one(buf)
         return buf.getvalue()
 
@@ -38,19 +38,19 @@ class lumos_lcm_battery(object):
             buf = data
         else:
             buf = BytesIO(data)
-        if buf.read(8) != lumos_lcm_battery._get_packed_fingerprint():
+        if buf.read(8) != robot_battery_lcmt._get_packed_fingerprint():
             raise ValueError("Decode error")
-        return lumos_lcm_battery._decode_one(buf)
+        return robot_battery_lcmt._decode_one(buf)
 
     @staticmethod
     def _decode_one(buf):
-        self = lumos_lcm_battery()
+        self = robot_battery_lcmt()
         self.voltage, self.current, self.percentage = struct.unpack(">ffh", buf.read(10))
         return self
 
     @staticmethod
     def _get_hash_recursive(parents):
-        if lumos_lcm_battery in parents: return 0
+        if robot_battery_lcmt in parents: return 0
         tmphash = (0x60badf70c35a97c7) & 0xffffffffffffffff
         tmphash  = (((tmphash<<1)&0xffffffffffffffff) + (tmphash>>63)) & 0xffffffffffffffff
         return tmphash
@@ -58,11 +58,11 @@ class lumos_lcm_battery(object):
 
     @staticmethod
     def _get_packed_fingerprint():
-        if lumos_lcm_battery._packed_fingerprint is None:
-            lumos_lcm_battery._packed_fingerprint = struct.pack(">Q", lumos_lcm_battery._get_hash_recursive([]))
-        return lumos_lcm_battery._packed_fingerprint
+        if robot_battery_lcmt._packed_fingerprint is None:
+            robot_battery_lcmt._packed_fingerprint = struct.pack(">Q", robot_battery_lcmt._get_hash_recursive([]))
+        return robot_battery_lcmt._packed_fingerprint
 
     def get_hash(self):
         """Get the LCM hash of the struct"""
-        return struct.unpack(">Q", lumos_lcm_battery._get_packed_fingerprint())[0]
+        return struct.unpack(">Q", robot_battery_lcmt._get_packed_fingerprint())[0]
 

@@ -3,8 +3,25 @@
 #include <iostream>
 #include <csignal>
 #include <atomic>
+#include <cstring>
 #include <glog/logging.h>
 
+/**
+ * NIX DEBUG 状态 smoke test。
+ *
+ * 功能:
+ *   验证 C++ SDK 能接收 IMU/status，并能按 controller 状态机执行
+ *   RESET -> STAND -> DEBUG -> RESET -> STAND。
+ *
+ * 使用:
+ *   cd lumos_sdk
+ *   ./build/nix_debug_state --help
+ *   ./build/nix_debug_state
+ *
+ * 注意:
+ *   本程序会真实发送状态命令，但不会发送关节目标。日常进入/退出 DEBUG
+ *   优先使用 python/nix_debug_state.py，便于设置 timeout 和 dry-run。
+ */
 static volatile bool g_running = true;
 static std::atomic<int> g_robot_state{0};
 static std::atomic<int> g_robot_type{0};
@@ -21,6 +38,7 @@ static const char* state_name(int8_t s) {
         case 3:  return "RL_WALK";
         case 5:  return "RL_LIEDOWN";
         case 6:  return "RL_MIMIC";
+        case 10: return "DEBUG";
         case 11: return "RL_NAV";
         case 12: return "RL_WALK_AMP";
         default: return "UNKNOWN";
@@ -53,7 +71,12 @@ static bool wait_state(SdkRobotManager& /*mgr*/, int target, int timeout_s) {
 }
 
 int main(int argc, char* argv[]) {
-    (void)(argc);
+    if (argc > 1 && (std::strcmp(argv[1], "--help") == 0 || std::strcmp(argv[1], "-h") == 0)) {
+        std::cout << "Usage: " << argv[0] << "\n"
+                  << "NIX DEBUG state smoke test. Sends RESET -> STAND -> DEBUG -> RESET -> STAND.\n"
+                  << "Use python/nix_debug_state.py for the safer day-to-day DEBUG entry.\n";
+        return 0;
+    }
     signal(SIGINT, sigint_handler);
 
     FLAGS_stderrthreshold = 0;
@@ -64,9 +87,9 @@ int main(int argc, char* argv[]) {
     manager.Init();
     manager.SetRobotStatusCb(on_robot_status);
 
-    // Diagnostic: also subscribe to myIMU to verify LCM receive works
-    manager.SetImuDataCb([](const microstrain_lcmt*) { g_imu_count++; });
-    LOG(INFO) << "SDK initialized, waiting for LCM (checking IMU)...";
+    // Diagnostic: also subscribe to lcm_imu_data to verify LCM receive works.
+    manager.SetImuDataCb([](const imu_data_lcmt*) { g_imu_count++; });
+    LOG(INFO) << "LCM initialized, waiting for lcm_imu_data...";
     for (int i = 0; i < 30 && g_imu_count == 0; i++) usleep(100000);
     LOG(INFO) << "IMU messages received in 3s: " << g_imu_count.load();
 
@@ -84,71 +107,55 @@ int main(int argc, char* argv[]) {
     LOG(INFO) << "Echo subscription (lcm_robot_cmd_echo) setup done";
 
     // ================================================================
-    // Step 1: Enter SDK control mode
+    // Step 1: RESET state (enter from NOT_A_STATE)
     // ================================================================
-    LOG(INFO) << "=== Step 1: Enter SDK control mode ===";
-    manager.SendModeCmd(1);
+    LOG(INFO) << "=== Step 1: Transition to RESET ===";
+    manager.SendRobotCmd(SdkStateType::RESET);
+    if (!wait_state(manager, 1, 10)) goto cleanup;
+    sleep(2);
+
+    // ================================================================
+    // Step 2: STAND state
+    // ================================================================
+    LOG(INFO) << "=== Step 2: Transition to STAND ===";
+    if (!g_running) goto cleanup;
+    manager.SendRobotCmd(SdkStateType::STAND);
+    if (!wait_state(manager, 2, 10)) goto cleanup;
+    sleep(10);
+
+    // ================================================================
+    // Step 3: DEBUG state, current controller joint-command entry
+    // ================================================================
+    LOG(INFO) << "=== Step 3: Enter DEBUG state ===";
+    manager.SendRobotCmd(SdkStateType::DEBUG);
+    if (!wait_state(manager, 10, 10)) goto cleanup;
     sleep(1);
     LOG(INFO) << "Echo check: pub_echo=" << g_pub_echo.load();
 
     // ================================================================
-    // Step 2: RESET state (enter from NOT_A_STATE)
+    // Step 4: RESET before leaving DEBUG
     // ================================================================
-    LOG(INFO) << "=== Step 2: Transition to RESET ===";
-    manager.SendRobotCmd(SdkStateType::RESET);
-    if (!wait_state(manager, 1, 10)) goto cleanup;
-    sleep(2);
-
-    // ================================================================
-    // Step 3: STAND state
-    // ================================================================
-    LOG(INFO) << "=== Step 3: Transition to STAND ===";
-    if (!g_running) goto cleanup;
-    manager.SendRobotCmd(SdkStateType::STAND);
-    if (!wait_state(manager, 2, 10)) goto cleanup;
-    sleep(10);
-
-    // ================================================================
-    // Step 4: RL_WALK_AMP - walk forward at 0.1 m/s for 3s
-    // ================================================================
-    LOG(INFO) << "=== Step 4: Transition to RL_WALK_AMP (forward 0.1m/s) ===";
-    if (!g_running) goto cleanup;
-    manager.SendRobotCmd(SdkStateType::RL_WALK_AMP, 0.1f);
-    if (!wait_state(manager, 12, 10)) goto cleanup;
-    sleep(5);
-
-    // Stop walking
-    manager.SendRobotCmd(SdkStateType::RL_WALK_AMP, 0.0f);
-    sleep(5);
-
-    // ================================================================
-    // Step 5: Back to RESET
-    // ================================================================
-    LOG(INFO) << "=== Step 5: Return to RESET ===";
+    LOG(INFO) << "=== Step 4: Return to RESET ===";
     if (!g_running) goto cleanup;
     manager.SendRobotCmd(SdkStateType::RESET);
     if (!wait_state(manager, 1, 10)) goto cleanup;
     sleep(2);
 
     // ================================================================
-    // Step 6: Back to STAND then exit SDK mode
+    // Step 5: Back to STAND
     // ================================================================
-    LOG(INFO) << "=== Step 6: Return to STAND ===";
+    LOG(INFO) << "=== Step 5: Return to STAND ===";
     if (!g_running) goto cleanup;
     manager.SendRobotCmd(SdkStateType::STAND);
     if (!wait_state(manager, 2, 10)) goto cleanup;
-    sleep(10);
-
-    manager.SendModeCmd(0);
     sleep(1);
 
-    LOG(INFO) << "=== SDK mode test SUCCESS ===";
+    LOG(INFO) << "=== NIX DEBUG state test SUCCESS ===";
 
 cleanup:
     if (!g_running) {
         manager.SendRobotCmd(SdkStateType::STAND);
         sleep(2);
-        manager.SendModeCmd(0);
         LOG(WARNING) << "Test interrupted by user.";
     }
     google::ShutdownGoogleLogging();

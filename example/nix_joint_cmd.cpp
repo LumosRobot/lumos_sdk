@@ -10,12 +10,13 @@
 #include <vector>
 #include <array>
 #include <fstream>
+#include <iostream>
 #include <cstring>
 #include <cstdlib>
 #include <glog/logging.h>
 
 /**
- * @brief   NIX2 SDK 关节级控制示例 / 策略轨迹回放工具
+ * @brief   NIX2 DEBUG 关节级控制示例 / 策略轨迹回放工具
  *
  *         控制源（四选一，只能保留一个宏）:
  *           CONTROL_ALL            — 使用本文件示例目标值，控制全身 21 关节
@@ -33,12 +34,12 @@
  *
  *         操作流程:
  *           1. 机器人端运行 lumos_controller
- *           2. 可选: 先运行 ./nix_recv_all_data 纯监听记录数据
+ *           2. 可选: 先运行 ./nix_lcm_sub 纯监听记录数据
  *           3. 本地 build 目录运行:
- *                ./nix_cmd_all_joints      # 默认回放 1 遍
- *                ./nix_cmd_all_joints 3    # 回放 3 遍
- *                ./nix_cmd_all_joints 0    # 无限回放，Ctrl-C 停止
- *           4. 本程序负责进入/退出 SDK 模式；其他监听程序不要发送 SendModeCmd
+ *                ./nix_joint_cmd      # 默认回放 1 遍
+ *                ./nix_joint_cmd 3    # 回放 3 遍
+ *                ./nix_joint_cmd 0    # 无限回放，Ctrl-C 停止
+ *           4. 本程序负责进入/退出 DEBUG 状态；其他监听程序不要发送状态命令
  *
  *         全局关节索引 / SDK 下发顺序 (NIX2, 21 关节):
  *           0-5:   LEG_L  [髋俯仰, 髋横滚, 髋偏航, 膝, 踝俯仰, 踝横滚]
@@ -110,7 +111,7 @@ static void sigint_handler(int) { g_running = 0; }
 static std::mutex g_jpos_mutex;
 static std::map<std::pair<int16_t, int16_t>, float> g_current_pos;
 
-static void on_joint_data(const sdk_lcmt_joint_datasets* msg) {
+static void on_joint_data(const joint_datasets_lcmt* msg) {
     std::lock_guard<std::mutex> lock(g_jpos_mutex);
     for (int i = 0; i < msg->datasets_num; i++) {
         const auto& d = msg->datasets[i];
@@ -302,7 +303,7 @@ static void on_robot_status(const robot_status_lcmt* msg) {
     g_got_status = true;
 }
 
-static void on_imu_data(const microstrain_lcmt*) {
+static void on_imu_data(const imu_data_lcmt*) {
     g_imu_count++;
 }
 
@@ -492,6 +493,13 @@ static std::vector<SdkJointCmd> buildReplayCmds(
 
 // ═══════════════════════════════════════════════════════════════════
 int main(int argc, char* argv[]) {
+    if (argc > 1 && (std::strcmp(argv[1], "--help") == 0 || std::strcmp(argv[1], "-h") == 0)) {
+        std::cout << "Usage: " << argv[0] << " [replay_loops]\n"
+                  << "NIX joint command demo. Enters DEBUG and publishes joint_cmds_lcmt.\n"
+                  << "Current build-time control source is selected by CONTROL_* macros in example/nix_joint_cmd.cpp.\n"
+                  << "For day-to-day testing prefer python/nix_joint_cmd.py with --dry-run first.\n";
+        return 0;
+    }
     signal(SIGINT,  sigint_handler);
     signal(SIGTERM, sigint_handler);
 
@@ -507,7 +515,7 @@ int main(int argc, char* argv[]) {
     manager.SetImuDataCb(on_imu_data);
     manager.SetJointDataCb(on_joint_data);
 
-    bool sdk_mode_entered = false;
+    bool debug_state_entered = false;
 
 #ifndef CONTROL_REPLAY
     // 构建目标指令（由编译期宏选择 CONTROL_ALL/COMPONENT/SINGLE）
@@ -560,7 +568,7 @@ int main(int argc, char* argv[]) {
         goto cleanup;
     }
     LOG(INFO) << "STAND state reported. Waiting " << kStandSettleSec
-              << "s for stand interpolation to finish before SDK joint control.";
+              << "s for stand interpolation to finish before DEBUG joint control.";
     for (int i = 0; i < kStandSettleSec && g_running; ++i) {
         sleep(1);
     }
@@ -569,16 +577,15 @@ int main(int argc, char* argv[]) {
         goto cleanup;
     }
 
-    // ── 进入 SDK 模式 ─────────────────────────────────────────────
-    // controller 端只允许在 STAND/RESET 状态，或手柄已授权 SDK 模式时接受
-    // lcm_control_type。这里放在 STAND 成功之后，避免启动初期被拒绝。
-    LOG(INFO) << "=== Step 3: Enter SDK mode ===";
+    // ── 进入 DEBUG 状态 ─────────────────────────────────────────────
+    // 当前 lumos_controller 通过 RobotStateType::DEBUG 接收 lcm_joint_cmd。
+    LOG(INFO) << "=== Step 3: Enter DEBUG state ===";
     if (!g_running) {
         exit_code = 1;
         goto cleanup;
     }
-    manager.SendModeCmd(1);
-    sdk_mode_entered = true;
+    manager.SendRobotCmd(SdkStateType::DEBUG);
+    debug_state_entered = true;
     sleep(1);
 
 #ifdef CONTROL_REPLAY
@@ -691,8 +698,8 @@ int main(int argc, char* argv[]) {
     manager.SendRobotCmd(SdkStateType::RESET);
     wait_state(1, 10);
     sleep(3);
-    manager.SendModeCmd(0);
-    sdk_mode_entered = false;
+    manager.SendRobotCmd(SdkStateType::STAND);
+    debug_state_entered = false;
     sleep(1);
 
 cleanup:
@@ -702,11 +709,11 @@ cleanup:
         sleep(2);
         manager.SendRobotCmd(SdkStateType::RESET);
         sleep(3);
-        manager.SendModeCmd(0);
-        sdk_mode_entered = false;
-    } else if (sdk_mode_entered) {
-        LOG(WARNING) << "Leaving SDK mode after early exit...";
-        manager.SendModeCmd(0);
+        manager.SendRobotCmd(SdkStateType::STAND);
+        debug_state_entered = false;
+    } else if (debug_state_entered) {
+        LOG(WARNING) << "Leaving DEBUG state after early exit...";
+        manager.SendRobotCmd(SdkStateType::STAND);
         sleep(1);
     }
     google::ShutdownGoogleLogging();

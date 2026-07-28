@@ -4,7 +4,7 @@
 NIX2 远程策略执行脚本（LCM 版，去除 MuJoCo）
 
 流程：
-    1. 通过 LCM 订阅 IMU + JointsData，作为机器人状态
+    1. 通过 LCM 订阅 IMU + lcm_joint_data，作为机器人状态
     2. 加载 ONNX 策略 + 参考动作 npz
     3. 按 50Hz 构造 observation，跑策略，得到 action
     4. 通过 LCM 把 21 个关节的 target_pos = default_pos + action*scale 下发
@@ -12,10 +12,8 @@ NIX2 远程策略执行脚本（LCM 版，去除 MuJoCo）
 前置：
     - 机器人端已运行 lumos_controller
     - 已 source config_network_lcm.sh <网卡> 配置多播
-    - 已通过 sdk_debug.py 完成 RESET→STAND→进入 SDK 模式：
-          python3 python/sdk_debug.py state 1
-          python3 python/sdk_debug.py state 2     # 等约 11s 站稳
-          python3 python/sdk_debug.py mode 1
+    - 已通过 nix_debug_state.py 完成 RESET→STAND→进入 DEBUG 状态：
+          python3 python/nix_debug_state.py enter --timeout 15
 
 用法：
     python3 python/sim2real_lumos.py \
@@ -36,8 +34,14 @@ import time
 import threading
 
 import numpy as np
-import onnx
-import onnxruntime
+try:
+    import onnx
+except ImportError:
+    onnx = None
+try:
+    import onnxruntime
+except ImportError:
+    onnxruntime = None
 
 # ── LCM 类型加载（绕过生成代码的 module-vs-class 问题） ─────────────
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -55,11 +59,11 @@ def _load_lcm_class(modname: str):
     return cls
 
 
-sdk_lcmt_joint_cmd      = _load_lcm_class("sdk_lcmt_joint_cmd")
-sdk_lcmt_joint_data     = _load_lcm_class("sdk_lcmt_joint_data")
-sdk_lcmt_joint_cmds     = _load_lcm_class("sdk_lcmt_joint_cmds")
-sdk_lcmt_joint_datasets = _load_lcm_class("sdk_lcmt_joint_datasets")
-microstrain_lcmt        = _load_lcm_class("microstrain_lcmt")
+joint_cmd_lcmt      = _load_lcm_class("joint_cmd_lcmt")
+joint_data_lcmt     = _load_lcm_class("joint_data_lcmt")
+joint_cmds_lcmt     = _load_lcm_class("joint_cmds_lcmt")
+joint_datasets_lcmt = _load_lcm_class("joint_datasets_lcmt")
+imu_data_lcmt           = _load_lcm_class("imu_data_lcmt")
 
 
 # ── 常量 ─────────────────────────────────────────────────────────────
@@ -160,8 +164,8 @@ class RobotState:
 
 def setup_lcm(lc, state: RobotState):
     """订阅 LCM 通道，在主线程 handle_timeout 循环中消费。"""
-    lc.subscribe(CH_IMU,        lambda ch, data: state.update_imu(microstrain_lcmt.decode(data)))
-    lc.subscribe(CH_JOINT_DATA, lambda ch, data: state.update_joint(sdk_lcmt_joint_datasets.decode(data)))
+    lc.subscribe(CH_IMU,        lambda ch, data: state.update_imu(imu_data_lcmt.decode(data)))
+    lc.subscribe(CH_JOINT_DATA, lambda ch, data: state.update_joint(joint_datasets_lcmt.decode(data)))
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -297,12 +301,12 @@ def build_observation(motion_pos, motion_vel, motion_quat,
 # ═══════════════════════════════════════════════════════════════════
 def send_joint_targets(lc, joint_names, target_pos, kp, kd):
     """按 joint_names 顺序下发；target_pos/kp/kd 都是与 joint_names 同长的数组。"""
-    cmds = sdk_lcmt_joint_cmds()
+    cmds = joint_cmds_lcmt()
     cmds.cmds_num = len(joint_names)
     cmds.cmds = []
     for i, name in enumerate(joint_names):
         ctype, jid = JOINT_NAME_TO_SDK[name]
-        c = sdk_lcmt_joint_cmd()
+        c = joint_cmd_lcmt()
         c.component_type = ctype
         c.joint_id       = jid
         c.ctrlWord       = 3
@@ -323,6 +327,15 @@ def send_joint_targets(lc, joint_names, target_pos, kp, kd):
 # ═══════════════════════════════════════════════════════════════════
 def run(motion_file, policy_path, loop_motion=False, dry_run=False,
         start_frame=0, end_frame=None, motion_fps=50.0):
+    if onnx is None or onnxruntime is None:
+        missing = []
+        if onnx is None:
+            missing.append("onnx")
+        if onnxruntime is None:
+            missing.append("onnxruntime")
+        print(f"[ERROR] 缺少 Python 依赖: {', '.join(missing)}。请先安装后再运行策略回放。")
+        return
+
     # ── 加载参考动作 ───────────────────────────────────────────────
     motion = np.load(motion_file)
     ref_pos  = motion["joint_pos"]   # (T, 21) 列顺序 = 策略 joint_seq
@@ -391,7 +404,7 @@ def run(motion_file, policy_path, loop_motion=False, dry_run=False,
     state = RobotState()
     setup_lcm(lc, state)
 
-    print("[INFO] Waiting for IMU + JointsData ...")
+    print("[INFO] Waiting for IMU + lcm_joint_data ...")
     t0 = time.time()
     while time.time() - t0 < 5.0:
         lc.handle_timeout(10)   # 10ms，等数据
@@ -399,14 +412,14 @@ def run(motion_file, policy_path, loop_motion=False, dry_run=False,
             break
     if state.imu_cnt == 0 or state.joint_cnt == 0:
         print(f"[ERROR] no data. imu={state.imu_cnt} joint={state.joint_cnt}. "
-              f"检查多播路由和机器人侧 lumos_controller / SDK 模式是否就绪。")
+              f"检查多播路由和机器人侧 lumos_controller / DEBUG 状态是否就绪。")
         return
     print(f"[INFO] OK. imu={state.imu_cnt} joint={state.joint_cnt}")
 
     if dry_run:
         print("[WARN] DRY-RUN: 仅推理策略，不下发关节指令")
     else:
-        print("[WARN] 即将下发关节指令，请确认已进入 SDK 模式且机器人已 STAND。3s 后开始 ...")
+        print("[WARN] 即将下发关节指令，请确认已进入 DEBUG 状态且机器人已 STAND。3s 后开始 ...")
         time.sleep(3.0)
 
     # ── 控制循环：外层紧循环消费 LCM，内层按时间门触发 50Hz 推理 ─────
@@ -530,8 +543,8 @@ def run(motion_file, policy_path, loop_motion=False, dry_run=False,
     except KeyboardInterrupt:
         print("\n[INFO] Interrupted.")
     finally:
-        print("[INFO] Exit. (注意：本脚本不会自动退出 SDK 模式 / 切 RESET，"
-              "请用 sdk_debug.py 切回安全状态)")
+        print("[INFO] Exit. (注意：本脚本不会自动退出 DEBUG 状态 / 切 RESET，"
+              "请用 nix_robot_state.py state STAND --wait 切回安全状态)")
 
 
 def main():

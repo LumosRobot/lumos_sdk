@@ -8,6 +8,7 @@ from io import BytesIO
 import struct
 
 class lumos_lcm_agx(object):
+    """ DEPRECATED: use robot_status_lcmt instead (topic: lcm_robot_status) """
 
     __slots__ = ["state", "type"]
 

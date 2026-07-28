@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Mock NIX JointsData publisher for local subscriber testing.
+"""Mock NIX lcm_joint_data publisher for local subscriber testing.
 
 这个脚本用于不上真机时验证 ``nix_lcm_sub.py``：
 
@@ -49,7 +49,7 @@ def _typedef_dir() -> Path:
 
 
 def _load_lcm_class(modname: str):
-    """Load generated LCM class using the same workaround as SDK debug scripts."""
+    """Load generated LCM class while handling nested generated-type imports."""
 
     typedef_path = str(_typedef_dir())
     if typedef_path not in sys.path:
@@ -70,11 +70,11 @@ def load_lcm_module():
 
 
 def load_joint_types():
-    """Return ``(sdk_lcmt_joint_datasets, sdk_lcmt_joint_data)`` classes."""
+    """Return ``(joint_datasets_lcmt, joint_data_lcmt)`` classes."""
 
     try:
-        joint_data = _load_lcm_class("sdk_lcmt_joint_data")
-        datasets = _load_lcm_class("sdk_lcmt_joint_datasets")
+        joint_data = _load_lcm_class("joint_data_lcmt")
+        datasets = _load_lcm_class("joint_datasets_lcmt")
         return datasets, joint_data
     except Exception as exc:  # pragma: no cover - exact import errors vary.
         raise MockPublisherError(
@@ -83,7 +83,7 @@ def load_joint_types():
 
 
 def build_mock_message(frame_index: int = 0, joints: int = 12):
-    """Build one fake ``sdk_lcmt_joint_datasets`` message.
+    """Build one fake ``joint_datasets_lcmt`` message.
 
     By default this mirrors the SDK 下发顺序 (NIX2, 21 joints):
     LEG_L 6 + LEG_R 6 + WAIST 1 + ARM_L 4 + ARM_R 4. Values change with
@@ -118,7 +118,7 @@ def build_mock_message(frame_index: int = 0, joints: int = 12):
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Publish mock NIX JointsData messages for local testing.",
+        description="Publish mock NIX lcm_joint_data messages for local testing.",
     )
     parser.add_argument("--channel", default=DEFAULT_JOINT_CHANNEL)
     parser.add_argument("--url", default=None, help="Explicit LCM URL. Defaults to the SDK URL with ttl=255.")

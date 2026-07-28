@@ -2,15 +2,15 @@
 # -*- coding: utf-8 -*-
 """LUS2 27 自由度 SDK 关节指令下发工具。
 
-这个脚本通过 LCM 发布 ``sdk_lcmt_joint_cmds``，用于 LUS2/LUS 机器人
+这个脚本通过 LCM 发布 ``joint_cmds_lcmt``，用于 LUS2/LUS 机器人
 27 个关节的 Python SDK 控制：
 
     LEG_L 6 + LEG_R 6 + WAIST 1 + ARM_L 7 + ARM_R 7 = 27
 
 安全边界：
-    - 本脚本只发布关节指令，不负责进入或退出 SDK 模式。
-    - 发布前先让机器人进入 RESET/STAND，并进入 SDK 模式，例如：
-      ``python3 lumos_sdk/python/sdk_debug.py mode 1``。
+    - 本脚本只发布关节指令，不负责进入或退出 DEBUG 状态。
+    - 发布前先让机器人进入 RESET/STAND，并进入 DEBUG 状态，例如：
+      ``python3 lumos_sdk/python/nix_debug_state.py enter --timeout 15``。
     - 第一次操作必须先加 ``--dry-run``，确认 component、joint_id、目标位置和增益。
     - 真机发布时从小幅度、短时间、单关节开始，不要直接回放长动作。
 
@@ -188,8 +188,8 @@ def load_lcm_runtime():
             "Python LCM binding 不可用。请安装/编译 lcm Python 包，"
             "或先使用 --dry-run 只检查指令内容。"
         ) from exc
-    joint_cmd = _load_lcm_class("sdk_lcmt_joint_cmd")
-    joint_cmds = _load_lcm_class("sdk_lcmt_joint_cmds")
+    joint_cmd = _load_lcm_class("joint_cmd_lcmt")
+    joint_cmds = _load_lcm_class("joint_cmds_lcmt")
     return lcm_mod, joint_cmd, joint_cmds
 
 
@@ -565,7 +565,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         epilog=(
             "全局索引顺序：0-5 LEG_L，6-11 LEG_R，12 WAIST，"
             "13-19 ARM_L，20-26 ARM_R。\n"
-            "安全建议：真机发布前先使用 --dry-run；发布前确认机器人已进入 SDK 模式。"
+            "安全建议：真机发布前先使用 --dry-run；发布前确认机器人已进入 DEBUG 状态。"
         ),
     )
     localize_argparse(parser)
@@ -721,7 +721,7 @@ def cmd_sine_sweep(args: argparse.Namespace) -> int:
 
     sub.listen(once=True, timeout_ms=500, duration_sec=10.0)
     if sub.message_count == 0:
-        print("错误：10 秒内未收到 JointsData，检查机器人是否在线", file=sys.stderr)
+        print("错误：10 秒内未收到 lcm_joint_data，检查机器人是否在线", file=sys.stderr)
         return 3
 
     current_pos = None

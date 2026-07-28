@@ -7,13 +7,13 @@ DO NOT MODIFY BY HAND!!!!
 from io import BytesIO
 import struct
 
-import sdk_lcmt_joint_data
+import joint_data_lcmt
 
-class sdk_lcmt_joint_datasets(object):
+class joint_datasets_lcmt(object):
 
     __slots__ = ["datasets_num", "datasets"]
 
-    __typenames__ = ["int16_t", "sdk_lcmt_joint_data"]
+    __typenames__ = ["int16_t", "joint_data_lcmt"]
 
     __dimensions__ = [None, ["datasets_num"]]
 
@@ -21,18 +21,18 @@ class sdk_lcmt_joint_datasets(object):
         self.datasets_num = 0
         """ LCM Type: int16_t """
         self.datasets = []
-        """ LCM Type: sdk_lcmt_joint_data[datasets_num] """
+        """ LCM Type: joint_data_lcmt[datasets_num] """
 
     def encode(self):
         buf = BytesIO()
-        buf.write(sdk_lcmt_joint_datasets._get_packed_fingerprint())
+        buf.write(joint_datasets_lcmt._get_packed_fingerprint())
         self._encode_one(buf)
         return buf.getvalue()
 
     def _encode_one(self, buf):
         buf.write(struct.pack(">h", self.datasets_num))
         for i0 in range(self.datasets_num):
-            assert self.datasets[i0]._get_packed_fingerprint() == sdk_lcmt_joint_data._get_packed_fingerprint()
+            assert self.datasets[i0]._get_packed_fingerprint() == joint_data_lcmt._get_packed_fingerprint()
             self.datasets[i0]._encode_one(buf)
 
     @staticmethod
@@ -41,35 +41,35 @@ class sdk_lcmt_joint_datasets(object):
             buf = data
         else:
             buf = BytesIO(data)
-        if buf.read(8) != sdk_lcmt_joint_datasets._get_packed_fingerprint():
+        if buf.read(8) != joint_datasets_lcmt._get_packed_fingerprint():
             raise ValueError("Decode error")
-        return sdk_lcmt_joint_datasets._decode_one(buf)
+        return joint_datasets_lcmt._decode_one(buf)
 
     @staticmethod
     def _decode_one(buf):
-        self = sdk_lcmt_joint_datasets()
+        self = joint_datasets_lcmt()
         self.datasets_num = struct.unpack(">h", buf.read(2))[0]
         self.datasets = []
         for i0 in range(self.datasets_num):
-            self.datasets.append(sdk_lcmt_joint_data._decode_one(buf))
+            self.datasets.append(joint_data_lcmt._decode_one(buf))
         return self
 
     @staticmethod
     def _get_hash_recursive(parents):
-        if sdk_lcmt_joint_datasets in parents: return 0
-        newparents = parents + [sdk_lcmt_joint_datasets]
-        tmphash = (0xafe9a8cc2043ed25+ sdk_lcmt_joint_data._get_hash_recursive(newparents)) & 0xffffffffffffffff
+        if joint_datasets_lcmt in parents: return 0
+        newparents = parents + [joint_datasets_lcmt]
+        tmphash = (0xafe9a8cc2043ed25+ joint_data_lcmt._get_hash_recursive(newparents)) & 0xffffffffffffffff
         tmphash  = (((tmphash<<1)&0xffffffffffffffff) + (tmphash>>63)) & 0xffffffffffffffff
         return tmphash
     _packed_fingerprint = None
 
     @staticmethod
     def _get_packed_fingerprint():
-        if sdk_lcmt_joint_datasets._packed_fingerprint is None:
-            sdk_lcmt_joint_datasets._packed_fingerprint = struct.pack(">Q", sdk_lcmt_joint_datasets._get_hash_recursive([]))
-        return sdk_lcmt_joint_datasets._packed_fingerprint
+        if joint_datasets_lcmt._packed_fingerprint is None:
+            joint_datasets_lcmt._packed_fingerprint = struct.pack(">Q", joint_datasets_lcmt._get_hash_recursive([]))
+        return joint_datasets_lcmt._packed_fingerprint
 
     def get_hash(self):
         """Get the LCM hash of the struct"""
-        return struct.unpack(">Q", sdk_lcmt_joint_datasets._get_packed_fingerprint())[0]
+        return struct.unpack(">Q", joint_datasets_lcmt._get_packed_fingerprint())[0]
 

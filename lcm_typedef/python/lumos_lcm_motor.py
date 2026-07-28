@@ -8,6 +8,7 @@ from io import BytesIO
 import struct
 
 class lumos_lcm_motor(object):
+    """ DEPRECATED: motor status/type identification (legacy) """
 
     __slots__ = ["type", "state", "id"]
 

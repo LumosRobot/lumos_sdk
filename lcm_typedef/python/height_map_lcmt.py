@@ -7,7 +7,7 @@ DO NOT MODIFY BY HAND!!!!
 from io import BytesIO
 import struct
 
-class height_map(object):
+class height_map_lcmt(object):
 
     __slots__ = ["h"]
 
@@ -21,7 +21,7 @@ class height_map(object):
 
     def encode(self):
         buf = BytesIO()
-        buf.write(height_map._get_packed_fingerprint())
+        buf.write(height_map_lcmt._get_packed_fingerprint())
         self._encode_one(buf)
         return buf.getvalue()
 
@@ -34,19 +34,19 @@ class height_map(object):
             buf = data
         else:
             buf = BytesIO(data)
-        if buf.read(8) != height_map._get_packed_fingerprint():
+        if buf.read(8) != height_map_lcmt._get_packed_fingerprint():
             raise ValueError("Decode error")
-        return height_map._decode_one(buf)
+        return height_map_lcmt._decode_one(buf)
 
     @staticmethod
     def _decode_one(buf):
-        self = height_map()
+        self = height_map_lcmt()
         self.h = struct.unpack('>315f', buf.read(1260))
         return self
 
     @staticmethod
     def _get_hash_recursive(parents):
-        if height_map in parents: return 0
+        if height_map_lcmt in parents: return 0
         tmphash = (0xf19bfc2ff1ff5284) & 0xffffffffffffffff
         tmphash  = (((tmphash<<1)&0xffffffffffffffff) + (tmphash>>63)) & 0xffffffffffffffff
         return tmphash
@@ -54,11 +54,11 @@ class height_map(object):
 
     @staticmethod
     def _get_packed_fingerprint():
-        if height_map._packed_fingerprint is None:
-            height_map._packed_fingerprint = struct.pack(">Q", height_map._get_hash_recursive([]))
-        return height_map._packed_fingerprint
+        if height_map_lcmt._packed_fingerprint is None:
+            height_map_lcmt._packed_fingerprint = struct.pack(">Q", height_map_lcmt._get_hash_recursive([]))
+        return height_map_lcmt._packed_fingerprint
 
     def get_hash(self):
         """Get the LCM hash of the struct"""
-        return struct.unpack(">Q", height_map._get_packed_fingerprint())[0]
+        return struct.unpack(">Q", height_map_lcmt._get_packed_fingerprint())[0]
 

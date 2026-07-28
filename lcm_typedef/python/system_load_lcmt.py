@@ -7,7 +7,7 @@ DO NOT MODIFY BY HAND!!!!
 from io import BytesIO
 import struct
 
-class system_load_t(object):
+class system_load_lcmt(object):
 
     __slots__ = ["timestamp", "cpu", "mem", "disk", "all_cpu"]
 
@@ -29,7 +29,7 @@ class system_load_t(object):
 
     def encode(self):
         buf = BytesIO()
-        buf.write(system_load_t._get_packed_fingerprint())
+        buf.write(system_load_lcmt._get_packed_fingerprint())
         self._encode_one(buf)
         return buf.getvalue()
 
@@ -43,20 +43,20 @@ class system_load_t(object):
             buf = data
         else:
             buf = BytesIO(data)
-        if buf.read(8) != system_load_t._get_packed_fingerprint():
+        if buf.read(8) != system_load_lcmt._get_packed_fingerprint():
             raise ValueError("Decode error")
-        return system_load_t._decode_one(buf)
+        return system_load_lcmt._decode_one(buf)
 
     @staticmethod
     def _decode_one(buf):
-        self = system_load_t()
+        self = system_load_lcmt()
         self.timestamp, self.cpu, self.mem, self.disk = struct.unpack(">qfff", buf.read(20))
         self.all_cpu = struct.unpack('>8f', buf.read(32))
         return self
 
     @staticmethod
     def _get_hash_recursive(parents):
-        if system_load_t in parents: return 0
+        if system_load_lcmt in parents: return 0
         tmphash = (0x1f418ef292867a3c) & 0xffffffffffffffff
         tmphash  = (((tmphash<<1)&0xffffffffffffffff) + (tmphash>>63)) & 0xffffffffffffffff
         return tmphash
@@ -64,11 +64,11 @@ class system_load_t(object):
 
     @staticmethod
     def _get_packed_fingerprint():
-        if system_load_t._packed_fingerprint is None:
-            system_load_t._packed_fingerprint = struct.pack(">Q", system_load_t._get_hash_recursive([]))
-        return system_load_t._packed_fingerprint
+        if system_load_lcmt._packed_fingerprint is None:
+            system_load_lcmt._packed_fingerprint = struct.pack(">Q", system_load_lcmt._get_hash_recursive([]))
+        return system_load_lcmt._packed_fingerprint
 
     def get_hash(self):
         """Get the LCM hash of the struct"""
-        return struct.unpack(">Q", system_load_t._get_packed_fingerprint())[0]
+        return struct.unpack(">Q", system_load_lcmt._get_packed_fingerprint())[0]
 
