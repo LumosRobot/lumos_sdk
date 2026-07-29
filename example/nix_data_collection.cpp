@@ -11,19 +11,26 @@
 #include <sstream>
 #include <vector>
 #include <cmath>
+#include <cstring>
 #include <glog/logging.h>
 #include <filesystem>
 
 
 /**
- * @brief   用于从LCM接收所有数据并保存到CSV文件中，方便后续分析。包括机器人状态、关节数据和IMU数据。
- *          操作流程：
- *              1. (本地)运行config_network_lcm.sh配置路由
- *              2. (ssh远端)修改lumos_controller中enable_publish_thread_为true，编译运行
- *              3. (本地)编译并运行recv_all_data(在build目录下执行)
- *              3. 会有三个csv文件生成到build/recv_all_data_dir目录下 
- * @author  jiangbin
- * @date    2026-05-26
+ * NIX 主动数据采集场景。
+ *
+ * 功能:
+ *   采集 robot_status、lcm_joint_data、lcm_imu_data 并写入 CSV。该程序
+ *   不是纯监听工具，会主动发送 RESET/STAND/DEBUG/RL/MIMIC 等状态命令。
+ *
+ * 使用:
+ *   cd lumos_sdk
+ *   ./build/nix_data_collection --help
+ *   ./build/nix_data_collection
+ *
+ * 注意:
+ *   这不是普通 smoke test。若只想记录真机反馈，使用 ./build/nix_lcm_sub。
+ *   运行本程序前必须确认机器人状态、动作场景、急停和采集目标。
  */
 
 
@@ -94,10 +101,11 @@ static const char* state_name(int8_t s) {
         case 3:  return "RL_WALK";
         case 5:  return "RL_LIEDOWN";
         case 6:  return "ST_MIMIC";
+        case 10: return "DEBUG";
         case 11: return "RL_NAV";
         case 12: return "RL_WALK_AMP";
-        case 16: return "BY_MIMIC";
-        case 17: return "BFM_MIMIC";
+        case 20: return "BY_MIMIC";
+        case 21: return "BFM_MIMIC";
         default: return "UNKNOWN";
     }
 }
@@ -277,7 +285,12 @@ static void write_status_csv(const std::string& path) {
 
 // ── main ──────────────────────────────────────────────────────────
 int main(int argc, char* argv[]) {
-    (void)(argc);
+    if (argc > 1 && (std::strcmp(argv[1], "--help") == 0 || std::strcmp(argv[1], "-h") == 0)) {
+        std::cout << "Usage: " << argv[0] << "\n"
+                  << "Active NIX data collection scenario. Sends RESET/STAND/DEBUG/RL/MIMIC states and records CSV.\n"
+                  << "For passive recording use ./nix_lcm_sub instead.\n";
+        return 0;
+    }
     signal(SIGINT, sigint_handler);
     signal(SIGTERM, sigint_handler);
 
@@ -294,8 +307,8 @@ int main(int argc, char* argv[]) {
     manager.SetImuDataCb(on_imu_data);
 
     // Wait for LCM data.
-    // In RL mode, only myIMU is published continuously.
-    // lcm_robot_status and JointsData are only published in SDK mode.
+    // In RL mode, only lcm_imu_data is published continuously.
+    // lcm_joint_data is published by controller DebugState.
     LOG(INFO) << "Waiting for LCM data (checking IMU)...";
     int imu_before = g_imu_records.size();
     for (int i = 0; i < 30; i++) { usleep(100000); }
@@ -309,29 +322,30 @@ int main(int argc, char* argv[]) {
     }
 
     // ================================================================
-    // Step 1: Enter SDK control mode
+    // Step 1: RESET
     // ================================================================
-    LOG(INFO) << "=== Step 1: Enter SDK mode ===";
-    manager.SendModeCmd(1);
-    sleep(1);
-
-    // ================================================================
-    // Step 2: RESET
-    // ================================================================
-    LOG(INFO) << "=== Step 2: RESET ===";
+    LOG(INFO) << "=== Step 1: RESET ===";
     if (!g_running) goto save;
     manager.SendRobotCmd(SdkStateType::RESET);
     if (!wait_state(1, 15)) goto save;
     sleep(3);
 
     // ================================================================
-    // Step 3: STAND
+    // Step 2: STAND
     // ================================================================
-    LOG(INFO) << "=== Step 3: STAND ===";
+    LOG(INFO) << "=== Step 2: STAND ===";
     if (!g_running) goto save;
     manager.SendRobotCmd(SdkStateType::STAND);
     if (!wait_state(2, 15)) goto save;
     sleep(3);
+
+    // ================================================================
+    // Step 3: DEBUG state for lcm_joint_data
+    // ================================================================
+    LOG(INFO) << "=== Step 3: Enter DEBUG state ===";
+    manager.SendRobotCmd(SdkStateType::DEBUG);
+    if (!wait_state(10, 15)) goto save;
+    sleep(1);
 
     /*
     // ================================================================
@@ -379,9 +393,9 @@ int main(int argc, char* argv[]) {
 
 
     // ================================================================
-    // Step 6: STAND
+    // Step 4: STAND
     // ================================================================
-    LOG(INFO) << "=== Step 6: STAND ===";
+    LOG(INFO) << "=== Step 4: STAND ===";
     if (!g_running) goto save;
     // RL_WALK -> RESET first (safe transition)
     manager.SendRobotCmd(SdkStateType::RESET);
@@ -392,14 +406,14 @@ int main(int argc, char* argv[]) {
     sleep(2);
 
     // ================================================================
-    // Step 7: RESET and exit SDK mode
+    // Step 5: RESET and exit DEBUG state
     // ================================================================
-    LOG(INFO) << "=== Step 7: RESET + exit SDK mode ===";
+    LOG(INFO) << "=== Step 5: RESET + exit DEBUG state ===";
     if (!g_running) goto save;
     manager.SendRobotCmd(SdkStateType::RESET);
     if (!wait_state(1, 15)) goto save;
     sleep(3);
-    manager.SendModeCmd(0);
+    manager.SendRobotCmd(SdkStateType::STAND);
     sleep(1);
 
     LOG(INFO) << "=== Data collection SUCCESS ===";
@@ -411,11 +425,11 @@ save:
         sleep(3);
         manager.SendRobotCmd(SdkStateType::RESET);
         sleep(3);
-        manager.SendModeCmd(0);
+        manager.SendRobotCmd(SdkStateType::STAND);
     }
 
     // ── Write CSV files ────────────────────────────────────────────
-    const std::filesystem::path output_dir = "recv_all_data_dir";
+    const std::filesystem::path output_dir = "nix_data_collection_dir";
     std::filesystem::create_directories(output_dir);
 
     write_joint_csv((output_dir / "joint_data.csv").string());

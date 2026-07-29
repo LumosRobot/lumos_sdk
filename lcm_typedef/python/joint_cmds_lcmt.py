@@ -7,7 +7,7 @@ DO NOT MODIFY BY HAND!!!!
 from io import BytesIO
 import struct
 
-from joint_cmd_lcmt import joint_cmd_lcmt
+import joint_cmd_lcmt
 
 class joint_cmds_lcmt(object):
 

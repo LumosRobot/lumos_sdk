@@ -9,3 +9,6 @@ __pycache__/
 **/__pycache__/
 *.py[cod]
 *.egg-info/
+
+# SQLite databases
+*.db

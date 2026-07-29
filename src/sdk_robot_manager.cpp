@@ -3,7 +3,6 @@
 #include <glog/logging.h>
 #include "robot_cmd_lcmt.hpp"
 #include "joint_cmds_lcmt.hpp"
-#include "control_type_lcmt.hpp"
 
 
 #define LUMOS_LCM_URL_PORT "udpm://239.255.76.67:7667?ttl=255"
@@ -88,19 +87,6 @@ bool SdkRobotManager::SendJointCmds(const std::vector<SdkJointCmd>& joint_cmds) 
 
     bool ret = (0 == lcm_.publish("lcm_joint_cmd", &lcmt_joint_cmds));
     LOG(INFO) << "SendJointCmds, cmds size is " << joint_cmds.size() << ", ret=" << ret;
-    return ret;
-}
-
-bool SdkRobotManager::SendModeCmd(int mode) {
-    if (!lcm_.good()) {
-        LOG(ERROR) << "failed to SendModeCmd, lcm not good";
-        return false;
-    }
-
-    control_type_lcmt mode_cmd;
-    mode_cmd.controller_type = mode;
-    bool ret = (0 == lcm_.publish("lcm_control_type", &mode_cmd));
-    LOG(INFO) << "SendModeCmd mode is " << mode;
     return ret;
 }
 

@@ -5,8 +5,26 @@
 #include <csignal>
 #include <atomic>
 #include <chrono>
+#include <cstring>
 #include <glog/logging.h>
 
+/**
+ * NIX 状态机 smoke test。
+ *
+ * 功能:
+ *   默认验证 C++ SDK 的 RESET -> STAND 状态命令和 IMU/status 接收。
+ *   默认不会进入 RL_WALK，也不会发送关节目标。
+ *
+ * 使用:
+ *   cd lumos_sdk
+ *   ./build/nix_robot_state --help
+ *   ./build/nix_robot_state
+ *   ./build/nix_robot_state --walk-test   # 显式低速行走测试
+ *
+ * 注意:
+ *   --walk-test 会发送 RL_WALK 速度命令，只能在确认机器人安全站立、
+ *   周围空间和急停可用时运行。
+ */
 static volatile bool g_running = true;
 static std::atomic<int> g_robot_state{0};
 static std::atomic<int> g_joint_count{0};
@@ -22,6 +40,7 @@ static const char* state_name(int8_t s) {
         case 3:  return "RL_WALK";
         case 5:  return "RL_LIEDOWN";
         case 6:  return "RL_MIMIC";
+        case 10: return "DEBUG";
         case 11: return "RL_NAV";
         case 12: return "RL_WALK_AMP";
         default: return "UNKNOWN";
@@ -57,17 +76,30 @@ static bool wait_state(int target, int timeout_s) {
 }
 
 static void print_rate_stats() {
-    // Sample for 2 seconds
+    // Sample for 2 seconds.
     g_joint_count = 0;
     g_imu_count = 0;
     sleep(2);
     int jc = g_joint_count.load();
     int ic = g_imu_count.load();
-    std::cout << "[RATE] JointsData: " << (jc / 2.0) << " Hz, myIMU: " << (ic / 2.0) << " Hz" << std::endl;
+    std::cout << "[RATE] lcm_joint_data: " << (jc / 2.0) << " Hz, lcm_imu_data: " << (ic / 2.0) << " Hz" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
-    (void)(argc);
+    bool walk_test = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--walk-test") == 0) {
+            walk_test = true;
+        } else if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
+            std::cout << "Usage: " << argv[0] << " [--walk-test]\n"
+                      << "Default: RESET -> STAND smoke test only.\n"
+                      << "--walk-test: additionally enter RL_WALK and send low-speed velocity commands.\n";
+            return 0;
+        } else {
+            std::cerr << "Unknown argument: " << argv[i] << std::endl;
+            return 2;
+        }
+    }
     signal(SIGINT, sigint_handler);
     signal(SIGTERM, sigint_handler);
 
@@ -91,16 +123,9 @@ int main(int argc, char* argv[]) {
     }
 
     // ================================================================
-    // Step 1: Enter SDK control mode
+    // Step 1: RESET
     // ================================================================
-    LOG(INFO) << "=== Step 1: Enter SDK control mode ===";
-    manager.SendModeCmd(1);
-    sleep(1);
-
-    // ================================================================
-    // Step 2: RESET
-    // ================================================================
-    LOG(INFO) << "=== Step 2: RESET ===";
+    LOG(INFO) << "=== Step 1: RESET ===";
     if (!g_running) goto cleanup;
     manager.SendRobotCmd(SdkStateType::RESET);
     if (!wait_state(1, 15)) goto cleanup;
@@ -108,60 +133,53 @@ int main(int argc, char* argv[]) {
     print_rate_stats();
 
     // ================================================================
-    // Step 3: STAND
+    // Step 2: STAND
     // ================================================================
-    LOG(INFO) << "=== Step 3: STAND ===";
+    LOG(INFO) << "=== Step 2: STAND ===";
     if (!g_running) goto cleanup;
     manager.SendRobotCmd(SdkStateType::STAND);
     if (!wait_state(2, 15)) goto cleanup;
     sleep(5);
     print_rate_stats();
 
-    // ================================================================
-    // Step 4: RL_WALK (walk in place at low speed)
-    // ================================================================
-    LOG(INFO) << "=== Step 4: RL_WALK (forward 0.05 m/s, 5s) ===";
-    if (!g_running) goto cleanup;
-    manager.SendRobotCmd(SdkStateType::RL_WALK, 0.05f);
-    if (!wait_state(3, 10)) goto cleanup;
-    print_rate_stats();
+    if (walk_test) {
+        // ================================================================
+        // Optional Step 3: RL_WALK
+        // ================================================================
+        LOG(INFO) << "=== Optional Step 3: RL_WALK (forward 0.05 m/s, 5s) ===";
+        if (!g_running) goto cleanup;
+        manager.SendRobotCmd(SdkStateType::RL_WALK, 0.05f);
+        if (!wait_state(3, 10)) goto cleanup;
+        print_rate_stats();
 
-    // Walk for 5 seconds with velocity control
-    for (int t = 0; t < 5 && g_running; t++) {
-        // Gradually vary velocity to test control responsiveness
-        float vx = (t < 2) ? 0.05f : ((t < 4) ? 0.1f : 0.0f);
-        manager.SendRobotCmd(SdkStateType::RL_WALK, vx);
-        sleep(1);
+        // Walk for 5 seconds with velocity control.
+        for (int t = 0; t < 5 && g_running; t++) {
+            float vx = (t < 2) ? 0.05f : ((t < 4) ? 0.1f : 0.0f);
+            manager.SendRobotCmd(SdkStateType::RL_WALK, vx);
+            sleep(1);
+        }
+
+        manager.SendRobotCmd(SdkStateType::RL_WALK, 0.0f);
+        sleep(2);
+
+        // RL_WALK -> RESET is valid, STAND is not in RL_WALK transitions.
+        LOG(INFO) << "=== Optional Step 4: RESET ===";
+        if (!g_running) goto cleanup;
+        manager.SendRobotCmd(SdkStateType::RESET);
+        if (!wait_state(1, 15)) goto cleanup;
+        sleep(3);
+        print_rate_stats();
+    } else {
+        LOG(INFO) << "Skipping RL_WALK. Pass --walk-test to run velocity command test.";
     }
 
-    // Stop walking
-    manager.SendRobotCmd(SdkStateType::RL_WALK, 0.0f);
-    sleep(2);
-
-    // ================================================================
-    // Step 5: RESET (RL_WALK -> RESET is valid, STAND is not in RL_WALK transitions)
-    // ================================================================
-    LOG(INFO) << "=== Step 5: RESET ===";
-    if (!g_running) goto cleanup;
-    manager.SendRobotCmd(SdkStateType::RESET);
-    if (!wait_state(1, 15)) goto cleanup;
-    sleep(3);
-    print_rate_stats();
-
-    // Exit SDK mode
-    manager.SendModeCmd(0);
-    sleep(1);
-
-    LOG(INFO) << "=== High-level SDK test SUCCESS ===";
+    LOG(INFO) << "=== Robot state command test SUCCESS ===";
 
 cleanup:
     if (!g_running) {
-        LOG(WARNING) << "Interrupted, returning to safe state...";
+        LOG(WARNING) << "Interrupted, sending STAND...";
         manager.SendRobotCmd(SdkStateType::STAND);
         sleep(5);
-        manager.SendRobotCmd(SdkStateType::RESET);
-        sleep(3);
-        manager.SendModeCmd(0);
     }
     google::ShutdownGoogleLogging();
     return g_running ? 0 : 1;

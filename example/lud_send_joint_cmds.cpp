@@ -1,7 +1,25 @@
 #include "sdk_robot_manager.hpp"
 #include <unistd.h>
+#include <cstring>
+#include <iostream>
 #include <glog/logging.h>
 
+/**
+ * LUD 关节命令示例。
+ *
+ * 功能:
+ *   发送 RESET -> STAND -> DEBUG，然后向 LUD 四肢关节发布 joint_cmds_lcmt
+ *   目标，再发送 RL_LIEDOWN。
+ *
+ * 使用:
+ *   cd lumos_sdk
+ *   ./build/lud_send_joint_cmds --help
+ *   ./build/lud_send_joint_cmds
+ *
+ * 注意:
+ *   这是 LUD 机器人关节动作示例，不适用于 NIX 真机测试。运行前必须确认
+ *   机器人型号、急停、支撑状态和关节目标值。
+ */
 std::vector<SdkJointCmd> set_joint_cmds(int &joint_num, const float *poses, const float *kps,
                                         const float *kds, LudSdkComponentType type)
 {
@@ -22,7 +40,12 @@ std::vector<SdkJointCmd> set_joint_cmds(int &joint_num, const float *poses, cons
 
 int main(int argc, char *argv[])
 {
-  (void)(argc);
+  if (argc > 1 && (std::strcmp(argv[1], "--help") == 0 || std::strcmp(argv[1], "-h") == 0)) {
+    std::cout << "Usage: " << argv[0] << "\n"
+              << "LUD joint command demo. Enters DEBUG and sends arm/leg joint targets.\n"
+              << "Run only on a prepared LUD robot.\n";
+    return 0;
+  }
 
   FLAGS_stderrthreshold = 0; // 将所有级别的日志都输出到标准错误
   FLAGS_minloglevel = 0;     // 设置最小日志级别，0=INFO, 1=WARNING, 2=ERROR, 3=FATAL
@@ -40,8 +63,8 @@ int main(int argc, char *argv[])
   manager.SendRobotCmd(SdkStateType::STAND);
   sleep(10);
 
-  LOG(INFO) << "try switching to SDK control mode...";
-  manager.SendModeCmd(1);
+  LOG(INFO) << "try switching to DEBUG state...";
+  manager.SendRobotCmd(SdkStateType::DEBUG);
   sleep(10);
 
   int arm_joints_num = 4;
@@ -105,8 +128,8 @@ int main(int argc, char *argv[])
   LOG(INFO) << "try switching to RL_LIEDOWN state...";
   sleep(30);
 
-  // LOG(INFO) << "try switching to RL control mode...";
-  // manager.SendModeCmd(0);
+  // LOG(INFO) << "try switching to STAND state...";
+  // manager.SendRobotCmd(SdkStateType::STAND);
   // sleep(2);
 
   google::ShutdownGoogleLogging();

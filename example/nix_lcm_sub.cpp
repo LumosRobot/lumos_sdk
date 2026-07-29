@@ -7,31 +7,33 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <mutex>
 #include <sstream>
 #include <string>
 #include <vector>
+#include <cstring>
 #include <glog/logging.h>
 
 /**
  * @brief NIX2 SDK 被动数据记录程序。
  *
- *        本程序只订阅 LCM 数据并写出 CSV 文件，不会发送 SendModeCmd()、
- *        SendRobotCmd() 或任何关节控制指令，因此不会抢占 nix_cmd_all_joints
- *        对 SDK 模式和机器人运动的控制权。
+ *        本程序只订阅 LCM 数据并写出 CSV 文件，不会发送状态命令、
+ *        SendRobotCmd() 或任何关节控制指令，因此不会抢占 nix_joint_cmd
+ *        对 DEBUG 状态和机器人运动的控制权。
  *
  *        推荐运行流程:
  *          1. 机器人端先启动 lumos_controller。
- *          2. 在本地 build/ 目录运行: ./nix_recv_all_data
- *          3. 另开终端运行: ./nix_cmd_all_joints
- *             由 nix_cmd_all_joints 负责进入 SDK 模式并下发动作。
- *          4. 动作结束后，在 nix_recv_all_data 终端按 Ctrl-C 保存数据。
+ *          2. 在本地 build/ 目录运行: ./nix_lcm_sub
+ *          3. 另开终端运行: ./nix_joint_cmd
+ *             由 nix_joint_cmd 负责进入 DEBUG 状态并下发动作。
+ *          4. 动作结束后，在 nix_lcm_sub 终端按 Ctrl-C 保存数据。
  *
  *        数据说明:
- *          - myIMU 通常在进入 SDK 模式前就能收到。
- *          - JointsData 和周期性的 lcm_robot_status 通常在 controller 进入
- *            SDK 关节级控制后开始发布，因此一般会在 nix_cmd_all_joints
- *            进入 SDK 模式后才持续记录。
+ *          - lcm_imu_data 通常在进入 DEBUG 状态前就能收到。
+ *          - lcm_joint_data 和周期性的 lcm_robot_status 通常在 controller 进入
+ *            DEBUG 关节级控制后开始发布，因此一般会在 nix_joint_cmd
+ *            进入 DEBUG 状态后才持续记录。
  */
 
 static volatile std::sig_atomic_t g_running = 1;
@@ -261,7 +263,7 @@ static void write_status_csv(const std::string& path) {
 }
 
 static void write_all_csv() {
-    const std::filesystem::path output_dir = "nix_recv_all_data_dir";
+    const std::filesystem::path output_dir = "nix_lcm_sub_dir";
     std::filesystem::create_directories(output_dir);
 
     write_joint_csv((output_dir / "joint_data.csv").string());
@@ -272,7 +274,12 @@ static void write_all_csv() {
 }
 
 int main(int argc, char* argv[]) {
-    (void)argc;
+    if (argc > 1 && (std::strcmp(argv[1], "--help") == 0 || std::strcmp(argv[1], "-h") == 0)) {
+        std::cout << "Usage: " << argv[0] << "\n"
+                  << "Passive NIX LCM subscriber. Does not send robot or joint commands.\n"
+                  << "Writes CSV files to nix_lcm_sub_dir when stopped with Ctrl-C.\n";
+        return 0;
+    }
     signal(SIGINT, sigint_handler);
     signal(SIGTERM, sigint_handler);
 
@@ -286,8 +293,8 @@ int main(int argc, char* argv[]) {
     manager.SetJointDataCb(on_joint_data);
     manager.SetImuDataCb(on_imu_data);
 
-    LOG(INFO) << "Passive recorder started. It will NOT enter or exit SDK mode.";
-    LOG(INFO) << "Start nix_cmd_all_joints in another terminal, then press Ctrl-C here to save CSV.";
+    LOG(INFO) << "Passive recorder started. It will NOT enter or exit DEBUG state.";
+    LOG(INFO) << "Start nix_joint_cmd in another terminal, then press Ctrl-C here to save CSV.";
 
     int last_joint = 0;
     int last_imu = 0;
@@ -299,8 +306,8 @@ int main(int argc, char* argv[]) {
         const int imu = g_imu_msg_count.load();
         const int status = g_status_msg_count.load();
 
-        LOG(INFO) << "recv rate approx: JointsData=" << (joint - last_joint)
-                  << " msg/s, myIMU=" << (imu - last_imu)
+        LOG(INFO) << "recv rate approx: lcm_joint_data=" << (joint - last_joint)
+                  << " msg/s, lcm_imu_data=" << (imu - last_imu)
                   << " msg/s, status=" << (status - last_status)
                   << " msg/s, state=" << state_name(static_cast<int8_t>(g_robot_state.load()))
                   << "(" << g_robot_state.load() << ")"

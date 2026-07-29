@@ -7,7 +7,7 @@ DO NOT MODIFY BY HAND!!!!
 from io import BytesIO
 import struct
 
-from joint_data_lcmt import joint_data_lcmt
+import joint_data_lcmt
 
 class joint_datasets_lcmt(object):
 

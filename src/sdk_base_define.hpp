@@ -64,7 +64,7 @@ enum class SdkStateType
   // STAND_WALK,
   // RECOVER_RL_WALK,
   // RECOVER_PREPARE,
-  // DEBUG = 10,
+  DEBUG = 10,
   RL_NAV = 11,
   RL_WALK_AMP,
   BY_MIMIC = 20,
