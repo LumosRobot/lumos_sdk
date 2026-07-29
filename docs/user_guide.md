@@ -298,6 +298,7 @@ python3 python/nix_debug_state.py --dry-run
 ```bash
 python3 python/nix_robot_state.py list
 python3 python/nix_robot_state.py stand --timeout 25 --stand-settle 2
+python3 python/nix_robot_state.py stand --enter-debug --timeout 25 --stand-settle 2
 python3 python/nix_robot_state.py listen --duration 10
 python3 python/nix_robot_state.py state STAND --wait --timeout 25
 ```
@@ -431,7 +432,7 @@ python3 python/lus_joint_cmd.py stand --dry-run
 | `nix_lcm_sub` | 被动订阅 IMU/status/joint feedback，写 CSV | 低，不发命令 |
 | `nix_robot_state` | 默认 `RESET -> STAND`，可选 `--walk-test` | 默认中等，`--walk-test` 高 |
 | `nix_debug_state` | `RESET -> STAND -> DEBUG -> RESET -> STAND` | 中等，不发关节目标 |
-| `nix_joint_cmd` | 进入 DEBUG 并发布关节命令 | 高，先用 Python 小目标验证 |
+| `nix_joint_cmd` | 进入 DEBUG 并发布关节命令；当前默认单关节为 WAIST，可用 `--hold-seconds N` 自动结束 | 高，先用 Python 小目标验证 |
 | `nix_data_collection` | 主动状态/RL/MIMIC 采集场景 | 高，不是 smoke test |
 | `lud_send_robot_cmd` | LUD 状态/速度示例 | 仅 LUD |
 | `lud_send_joint_cmds` | LUD 关节示例 | 仅 LUD |
@@ -443,6 +444,7 @@ python3 python/lus_joint_cmd.py stand --dry-run
 ./build/nix_robot_state --help
 ./build/nix_debug_state --help
 ./build/nix_joint_cmd --help
+./build/nix_joint_cmd --hold-seconds 0.5
 ./build/nix_data_collection --help
 ```
 

@@ -17,8 +17,11 @@
     # 只打印将要执行的 RESET -> STAND 流程，不发布 LCM。
     python3 lumos_sdk/python/nix_robot_state.py stand --dry-run
 
-    # RESET 后等待 RESET(1)，再 STAND 并等待 STAND(2)，最后进入 DEBUG(10)。
+    # RESET 后等待 RESET(1)，再 STAND 并等待 STAND(2)。
     python3 lumos_sdk/python/nix_robot_state.py stand --timeout 15
+
+    # 如果确实需要进入 SDK/DEBUG 模式，显式加 --enter-debug。
+    python3 lumos_sdk/python/nix_robot_state.py stand --enter-debug --timeout 15
 
     # 只发送并等待某个状态，例如 STAND。
     python3 lumos_sdk/python/nix_robot_state.py state STAND --wait --timeout 15
@@ -27,7 +30,8 @@
     python3 lumos_sdk/python/nix_robot_state.py listen --duration 10
 
 安全边界：
-    - 默认 ``stand`` 会先确认 RESET/STAND，再切入 DEBUG(10) 关节调试状态。
+    - 默认 ``stand`` 只确认 RESET/STAND；需要进入 DEBUG(10) 时显式加
+      ``--enter-debug``，或使用 ``nix_debug_state.py enter``。
     - ``state STATE --wait`` 依赖 controller 发布 ``lcm_robot_status``。如果机器人
       已经处在同一个 STATE，controller 可能不会重复发布状态确认；真机 smoke
       test 优先使用 ``stand`` 或 ``nix_debug_state.py enter/leave``。
@@ -334,9 +338,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="发布 NIX 高层状态命令，并等待 lcm_robot_status 确认。",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            "推荐采集前流程：\n"
+            "推荐站立流程：\n"
             "  python3 lumos_sdk/python/nix_robot_state.py stand --timeout 15 --stand-settle 10\n"
-            "成功标志：输出“已确认：state=STAND(2)”和“已确认：state=DEBUG(10)”。\n"
+            "成功标志：输出“已确认：state=STAND(2)”。\n"
+            "如需进入 SDK/DEBUG 模式：\n"
+            "  python3 lumos_sdk/python/nix_robot_state.py stand --enter-debug --timeout 15\n"
             "注意：state STATE --wait 在目标状态未变化时可能等不到新的 status；"
             "真机 smoke test 优先使用 stand。"
         ),
@@ -359,14 +365,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     add_lcm_args(p_state)
     p_state.set_defaults(func=cmd_state)
 
-    p_stand = sub.add_parser("stand", help="执行 RESET -> STAND，确认后进入 DEBUG")
+    p_stand = sub.add_parser("stand", help="执行 RESET -> STAND")
     localize_argparse(p_stand)
-    p_stand.add_argument("--no-enter-debug", "--no-enter-sdk", dest="enter_debug", action="store_false", help="确认 STAND 后不自动进入 DEBUG(10)")
+    p_stand.add_argument("--enter-debug", "--enter-sdk", dest="enter_debug", action="store_true", help="确认 STAND 后继续进入 DEBUG(10)")
+    p_stand.add_argument("--no-enter-debug", "--no-enter-sdk", dest="enter_debug", action="store_false", help=argparse.SUPPRESS)
     p_stand.add_argument("--skip-reset", action="store_true", help="跳过 RESET，直接发送 STAND 并等待确认")
     p_stand.add_argument("--timeout", type=float, default=15.0, help="每个状态等待确认的超时时间，单位秒")
     p_stand.add_argument("--reset-settle", type=float, default=3.0, help="确认 RESET 后等待时间，单位秒")
     p_stand.add_argument("--stand-settle", type=float, default=0.0, help="确认 STAND 后继续等待站稳时间，单位秒")
-    p_stand.set_defaults(enter_debug=True)
+    p_stand.set_defaults(enter_debug=False)
     add_lcm_args(p_stand)
     p_stand.set_defaults(func=cmd_stand)
 

@@ -36,9 +36,10 @@
  *           1. 机器人端运行 lumos_controller
  *           2. 可选: 先运行 ./nix_lcm_sub 纯监听记录数据
  *           3. 本地 build 目录运行:
- *                ./nix_joint_cmd      # 默认回放 1 遍
- *                ./nix_joint_cmd 3    # 回放 3 遍
- *                ./nix_joint_cmd 0    # 无限回放，Ctrl-C 停止
+ *                ./nix_joint_cmd --hold-seconds 0.5  # 非回放示例自动结束
+ *                ./nix_joint_cmd                     # 非回放示例保持到 Ctrl-C
+ *                ./nix_joint_cmd 3                   # CONTROL_REPLAY 时回放 3 遍
+ *                ./nix_joint_cmd 0                   # CONTROL_REPLAY 时无限回放
  *           4. 本程序负责进入/退出 DEBUG 状态；其他监听程序不要发送状态命令
  *
  *         全局关节索引 / SDK 下发顺序 (NIX2, 21 关节):
@@ -63,7 +64,7 @@
 // 示例目标控制：使用下方 g_leg_l/g_arm_l/... 数组里的固定目标值。
 //#define CONTROL_ALL          
 //#define CONTROL_COMPONENT static_cast<int>(SdkComponentType::LEG_R) // ARM_L | ARM_R | WAIST | LEG_L | LEG_R
-#define CONTROL_SINGLE  3         // 全局索引: 12 = WAIST 腰
+#define CONTROL_SINGLE  12        // 全局索引: 12 = WAIST 腰
 
 // 策略轨迹回放：读取 store_ref_motion.txt + kp_kd.yaml，按 argv[1] 指定遍数回放。
 // #define CONTROL_REPLAY
@@ -256,6 +257,7 @@ static const char* state_name(int8_t s) {
         case 3:  return "RL_WALK";
         case 5:  return "RL_LIEDOWN";
         case 6:  return "RL_MIMIC";
+        case 10: return "DEBUG";
         case 11: return "RL_NAV";
         case 12: return "RL_WALK_AMP";
         case 20: return "BY_MIMIC";
@@ -272,6 +274,7 @@ static bool is_main_robot_state(int state) {
         case static_cast<int>(SdkStateType::RL_WALK):
         case static_cast<int>(SdkStateType::RL_LIEDOWN):
         case static_cast<int>(SdkStateType::RL_MIMIC):
+        case static_cast<int>(SdkStateType::DEBUG):
         case static_cast<int>(SdkStateType::RL_NAV):
         case static_cast<int>(SdkStateType::RL_WALK_AMP):
         case static_cast<int>(SdkStateType::BY_MIMIC):
@@ -469,6 +472,31 @@ static bool parseReplayLoops(int argc, char* argv[], int& loops) {
     return true;
 }
 
+#ifndef CONTROL_REPLAY
+static bool parseOneshotArgs(int argc, char* argv[], double& hold_seconds) {
+    hold_seconds = 0.0;  // <=0 keeps the historical "hold until Ctrl-C" behavior.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--hold-seconds") == 0) {
+            if (i + 1 >= argc) {
+                LOG(ERROR) << "--hold-seconds requires a numeric value.";
+                return false;
+            }
+            char* end = nullptr;
+            double value = std::strtod(argv[++i], &end);
+            if (end == argv[i] || *end != '\0' || value < 0.0) {
+                LOG(ERROR) << "Invalid --hold-seconds value: '" << argv[i] << "'";
+                return false;
+            }
+            hold_seconds = value;
+        } else {
+            LOG(ERROR) << "Unknown argument: '" << argv[i] << "'. Use --help for usage.";
+            return false;
+        }
+    }
+    return true;
+}
+#endif
+
 // 从一帧 ref_motion 构建 21 个 SdkJointCmd
 static std::vector<SdkJointCmd> buildReplayCmds(
         const std::array<float, kReplayFieldNum>& frame,
@@ -497,6 +525,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Usage: " << argv[0] << " [replay_loops]\n"
                   << "NIX joint command demo. Enters DEBUG and publishes joint_cmds_lcmt.\n"
                   << "Current build-time control source is selected by CONTROL_* macros in example/nix_joint_cmd.cpp.\n"
+                  << "Non-replay builds also support: --hold-seconds N (0 means hold until Ctrl-C).\n"
                   << "For day-to-day testing prefer python/nix_joint_cmd.py with --dry-run first.\n";
         return 0;
     }
@@ -519,6 +548,10 @@ int main(int argc, char* argv[]) {
 
 #ifndef CONTROL_REPLAY
     // 构建目标指令（由编译期宏选择 CONTROL_ALL/COMPONENT/SINGLE）
+    double hold_seconds = 0.0;
+    if (!parseOneshotArgs(argc, argv, hold_seconds)) {
+        return 2;
+    }
     auto cmds = build_target_cmds();
     if (cmds.empty()) {
         LOG(ERROR) << "No joints selected — check CONTROL_xxx macro.";
@@ -683,9 +716,20 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-    LOG(INFO) << "Ramp complete. Holding position. Press Ctrl-C to exit.";
+    LOG(INFO) << "Ramp complete. Holding position"
+              << (hold_seconds > 0.0 ? " for requested duration." : ". Press Ctrl-C to exit.");
     manager.SendJointCmds(cmds);  // 精确到达目标
-    while (g_running) { usleep(100000); }
+    if (hold_seconds > 0.0) {
+        auto hold_until = std::chrono::steady_clock::now()
+                        + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                              std::chrono::duration<double>(hold_seconds));
+        while (g_running && std::chrono::steady_clock::now() < hold_until) {
+            manager.SendJointCmds(cmds);
+            usleep(100000);
+        }
+    } else {
+        while (g_running) { usleep(100000); }
+    }
 
 #endif
 
