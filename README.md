@@ -6,14 +6,23 @@
 
 ## 当前控制链路
 
+下发通道：
+
 | 功能 | Topic | Type |
 | --- | --- | --- |
 | 高层状态/速度命令 | `lcm_robot_cmd` | `robot_cmd_lcmt` |
 | 关节级命令 | `lcm_joint_cmd` | `joint_cmds_lcmt` |
-| 关节反馈 | `lcm_joint_data` | `joint_datasets_lcmt` |
-| 机器人状态 | `lcm_robot_status` | `robot_status_lcmt` |
-| IMU 数据 | `lcm_imu_data` | `imu_data_lcmt` |
 | 手臂命令 | `lcm_arm_cmd` | `arm_cmd_lcmt` |
+
+反馈/通知通道：
+
+| 功能 | Topic | Type |
+| --- | --- | --- |
+| 关节反馈 | `lcm_joint_data` | `joint_datasets_lcmt` |
+| 机器人状态/语音/事件通知 | `lcm_robot_status` | `robot_status_lcmt` |
+| IMU 数据 | `lcm_imu_data` | `imu_data_lcmt` |
+
+`lcm_robot_status` 是反馈/通知通道，不是主状态控制入口。切换 `RESET/STAND/DEBUG` 等主状态应发布 `lcm_robot_cmd/robot_cmd_lcmt`，再通过 `lcm_robot_status/robot_status_lcmt` 等待确认。
 
 关节级控制只在 controller 的 `DEBUG(10)` 状态下生效。标准顺序是：
 
@@ -23,13 +32,17 @@ RESET(1) -> STAND(2) -> DEBUG(10) -> publish lcm_joint_cmd/joint_cmds_lcmt
 
 进入 DEBUG，也就是现场常说的 SDK 模式，目前有两种方式：
 
-1. 手柄按键：`Back + Home`。
-2. 通过 `lumos_sdk` 发布状态命令切换到 `DEBUG(10)`，推荐使用 `python/nix_debug_state.py enter`。
+| 方式 | 状态 | 说明 |
+| --- | --- | --- |
+| 手柄 | 可用 | 按 `Back + Home` 进入 DEBUG |
+| `lumos_sdk` 状态命令 | 可用 | 发布 `lcm_robot_cmd/robot_cmd_lcmt` 切换到 `DEBUG(10)`，推荐使用 `python/nix_debug_state.py enter` |
 
 退出 DEBUG 也有两种方式：
 
-1. 手柄按键：`Start` 请求切到 `STAND`；双击 `Back` 请求切到 `RESET`。注意 `Home + Back` 是进入 DEBUG，不是退出。
-2. 通过 `lumos_sdk` 发布状态命令退出，推荐使用 `python/nix_debug_state.py leave` 切回 `STAND`；也可以用 `python/nix_robot_state.py state RESET --wait` 请求回 `RESET`。
+| 方式 | 状态 | 说明 |
+| --- | --- | --- |
+| 手柄 | 可用 | `Start` 请求切到 `STAND`；双击 `Back` 请求切到 `RESET`。注意 `Home + Back` 是进入 DEBUG，不是退出 |
+| `lumos_sdk` 状态命令 | 可用 | 推荐使用 `python/nix_debug_state.py leave` 切回 `STAND`；也可以用 `python/nix_robot_state.py state RESET --wait` 请求回 `RESET` |
 
 从 `lumos_controller` 当前 NIX2 配置确认，进入 DEBUG 有状态机前提：
 
@@ -39,12 +52,14 @@ RESET(1) -> STAND(2) -> DEBUG(10) -> publish lcm_joint_cmd/joint_cmds_lcmt
 - `DebugState` 进入后默认保持当前关节位置，不会自动插值到站姿；所以建议先完成 `RESET -> STAND` 并确认机器人稳定，再进入 DEBUG。
 - NIX2 配置允许从 `DEBUG` 退出到 `STAND` 或 `RESET`。手柄 `Start` 和双击 `Back`、SDK `leave/state` 命令都会走同一套状态转移检查。
 
-进入 DEBUG 后，SDK 关节控制可以走两种网络链路。两种链路使用同一套 LCM topic/type 和同一套脚本，不需要维护两套控制代码：
+进入 DEBUG 后，当前 SDK 关节控制只验证了网线链路：
 
-1. 网线链路：连接机器人网口，配置本机有线网卡静态 IPv4 和 LCM 组播路由，然后运行 `lumos_sdk` 下的脚本控制机器人。
-2. Wi-Fi 链路：连接机器人自身热点，例如 SN 尾号 `005` 的机器人热点通常是 `nix_NIX005`，密码是 `nix_NIX005_pd`；确认 LCM 组播路由指向 Wi-Fi 网卡后，运行同一套 `lumos_sdk` 脚本控制机器人。
+| 链路 | 状态 | 说明 |
+| --- | --- | --- |
+| 网线链路 | 已验证 | 连接机器人网口，配置本机有线网卡静态 IPv4 和 LCM 组播路由，然后运行 `lumos_sdk` 下的脚本控制机器人 |
+| 机器人 Wi-Fi 链路 | 待实现 | 当前不提供可用脚本或命令 |
 
-Wi-Fi 只是网络承载方式，不是新的 DEBUG 进入方式，也不是新的消息协议。连接机器人 Wi-Fi 时，本机可能临时失去外网，这是正常现象。
+Wi-Fi 未来只应作为网络承载方式，不应引入新的 DEBUG 进入方式或新的消息协议；实现前不要维护单独的 Wi-Fi 控制脚本。
 
 ## 环境配置
 
@@ -91,37 +106,9 @@ bash config_network_lcm.sh enp3s0
 
 ### Wi-Fi 链路
 
-机器人身上可能提供 Wi-Fi 热点。热点名和密码通常由机器人型号和 SN 派生，例如 SN 尾号为 `005` 时：
+待实现。
 
-- SSID: `nix_NIX005`
-- Password: `nix_NIX005_pd`
-
-连接热点后，把 LCM 组播路由指到 Wi-Fi 网卡。假设 Wi-Fi 网卡名是 `wlp3s0`：
-
-```bash
-nmcli dev wifi connect nix_NIX005 password nix_NIX005_pd ifname wlp3s0
-cd lumos_sdk
-bash config_network_lcm.sh wlp3s0
-```
-
-Wi-Fi 链路可用于进入 DEBUG，也可用于进入 DEBUG 后运行同一套 SDK 关节控制脚本。它和网线链路的差异只在网络配置，不在 SDK topic/type 或脚本接口。
-
-也可以使用封装好的 smoke test 脚本。脚本会记录当前 Wi-Fi 连接，临时切到机器人热点，配置 LCM 组播；退出时会尽量先离开 DEBUG，再切回原 Wi-Fi：
-
-```bash
-bash scripts/nix_wifi_debug_smoke.sh --sn 005 --wifi-iface wlp3s0 --diagnose-only
-bash scripts/nix_wifi_debug_smoke.sh --sn 005 --wifi-iface wlp3s0
-```
-
-`--diagnose-only` 只检查 Wi-Fi、路由和被动 LCM 接收，不发送状态命令。只有被动 LCM 检查能看到 IMU/status/joint 流量时，脚本才会继续进入 DEBUG。
-
-默认脚本只验证 Wi-Fi 链路、进入 DEBUG 和关节反馈，不发关节命令。确认机器人支撑、急停和周围空间后，才使用最小 WAIST 当前位姿保持命令：
-
-```bash
-bash scripts/nix_wifi_debug_smoke.sh --sn 005 --wifi-iface wlp3s0 --control-waist-hold
-```
-
-真机测试前确认机器人端 `lumos_controller` 正在运行、急停可用、机器人支撑和周围空间安全。手柄可以用于进入 DEBUG；进入 DEBUG 后通过 SDK 做关节控制时，不要让手柄或其它控制源持续发送冲突命令。
+当前不提供通过机器人 Wi-Fi 进入 DEBUG 或下发关节命令的 SDK 流程。后续需要先明确机器人侧 LCM 组播/桥接策略，再复用现有 topic/type。
 
 ## 编译
 
@@ -165,7 +152,7 @@ python3 python/nix_debug_state.py enter --dry-run
 python3 python/nix_joint_cmd.py single --component WAIST --joint-id 0 --pos 0.0 --dry-run
 ```
 
-进入 DEBUG。也可以用手柄 `Back + Home` 进入；如果当前使用机器人 Wi-Fi 链路，仍然运行同一个 SDK 命令。根据 controller 状态机，当前必须先处于 `RESET` 或 `STAND`，推荐用 SDK 命令执行完整 `RESET -> STAND -> DEBUG`：
+进入 DEBUG。也可以用手柄 `Back + Home` 进入。根据 controller 状态机，当前必须先处于 `RESET` 或 `STAND`，推荐在网线链路下用 SDK 命令执行完整 `RESET -> STAND -> DEBUG`：
 
 ```bash
 python3 python/nix_debug_state.py enter --timeout 25 --stand-settle 2
