@@ -160,6 +160,13 @@ cd lumos_sdk
 python3 python/nix_lcm_sub.py --once --print-limit 21
 ```
 
+也可以使用 `lcm-spy` GUI 查看实时 LCM 数据，作为补充调试工具：
+
+```bash
+sudo apt install liblcm-java
+lcm-spy
+```
+
 进入 DEBUG 前，先 dry-run：
 
 ```bash
