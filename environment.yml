@@ -1,0 +1,14 @@
+name: lumos-sdk
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - cmake
+  - make
+  - pkg-config
+  - numpy
+  - onnx
+  - onnxruntime
+  - pip
+
+# LCM 1.5.2 is installed from source with scripts/install_lcm_1_5_2.sh.

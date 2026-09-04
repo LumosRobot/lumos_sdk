@@ -427,11 +427,14 @@ python3 python/lus_joint_cmd.py stand --dry-run
 
 ## 6. C++ 示例
 
+SDK 分层测试命令见 [nix_sdk_test.md](nix_sdk_test.md)。原始 C++/Python 示例是
+唯一测试入口，不再维护一套拆分且重复的 `example/nix/test_*.cpp`。
+
 | 可执行文件 | 行为 | 真机风险 |
 | --- | --- | --- |
 | `nix_lcm_sub` | 被动订阅 IMU/status/joint feedback，写 CSV | 低，不发命令 |
-| `nix_robot_state` | 默认 `RESET -> STAND`，可选 `--walk-test` | 默认中等，`--walk-test` 高 |
-| `nix_debug_state` | `RESET -> STAND -> DEBUG -> RESET -> STAND` | 中等，不发关节目标 |
+| `nix_robot_state` | 默认 `RESET -> STAND`；支持 `state ID`；可选 `--walk-test` | 默认中等，`--walk-test` 高 |
+| `nix_debug_state` | `RESET -> STAND -> DEBUG -> RESET -> STAND`，检查命令回显 | 中等，不发关节目标 |
 | `nix_joint_cmd` | 进入 DEBUG 并发布关节命令；当前默认单关节为 WAIST，可用 `--hold-seconds N` 自动结束 | 高，先用 Python 小目标验证 |
 | `nix_data_collection` | 主动状态/RL/MIMIC 采集场景 | 高，不是 smoke test |
 | `lud_send_robot_cmd` | LUD 状态/速度示例 | 仅 LUD |
@@ -442,6 +445,8 @@ python3 python/lus_joint_cmd.py stand --dry-run
 ```bash
 ./build/nix_lcm_sub --help
 ./build/nix_robot_state --help
+./build/nix_robot_state state 1
+./build/nix_robot_state state 2
 ./build/nix_debug_state --help
 ./build/nix_joint_cmd --help
 ./build/nix_joint_cmd --hold-seconds 0.5
