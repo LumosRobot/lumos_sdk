@@ -287,7 +287,7 @@ static void write_status_csv(const std::string& path) {
 int main(int argc, char* argv[]) {
     if (argc > 1 && (std::strcmp(argv[1], "--help") == 0 || std::strcmp(argv[1], "-h") == 0)) {
         std::cout << "Usage: " << argv[0] << "\n"
-                  << "Active NIX data collection scenario. Sends RESET/STAND/DEBUG/RL/MIMIC states and records CSV.\n"
+              << "Active NIX data collection. Runs RESET -> STAND -> DEBUG -> RESET -> STAND and records CSV.\n"
                   << "For passive recording use ./nix_lcm_sub instead.\n";
         return 0;
     }
@@ -325,27 +325,29 @@ int main(int argc, char* argv[]) {
     // Step 1: RESET
     // ================================================================
     LOG(INFO) << "=== Step 1: RESET ===";
-    if (!g_running) goto save;
+    if (!g_running) { exit_code = 1; goto save; }
     manager.SendRobotCmd(SdkStateType::RESET);
-    if (!wait_state(1, 15)) goto save;
+    if (!wait_state(1, 15)) { exit_code = 1; goto save; }
     sleep(3);
 
     // ================================================================
     // Step 2: STAND
     // ================================================================
     LOG(INFO) << "=== Step 2: STAND ===";
-    if (!g_running) goto save;
+    if (!g_running) { exit_code = 1; goto save; }
     manager.SendRobotCmd(SdkStateType::STAND);
-    if (!wait_state(2, 15)) goto save;
-    sleep(3);
+    if (!wait_state(2, 15)) { exit_code = 1; goto save; }
+    LOG(INFO) << "Waiting 11s for stand interpolation to finish.";
+    sleep(11);
 
     // ================================================================
     // Step 3: DEBUG state for lcm_joint_data
     // ================================================================
     LOG(INFO) << "=== Step 3: Enter DEBUG state ===";
     manager.SendRobotCmd(SdkStateType::DEBUG);
-    if (!wait_state(10, 15)) goto save;
-    sleep(1);
+    if (!wait_state(10, 15)) { exit_code = 1; goto save; }
+    LOG(INFO) << "Collecting DEBUG feedback for 5s.";
+    sleep(5);
 
     /*
     // ================================================================
@@ -393,43 +395,36 @@ int main(int argc, char* argv[]) {
 
 
     // ================================================================
-    // Step 4: STAND
+    // Step 4: Return to RESET and STAND
     // ================================================================
-    LOG(INFO) << "=== Step 4: STAND ===";
-    if (!g_running) goto save;
-    // RL_WALK -> RESET first (safe transition)
+    LOG(INFO) << "=== Step 4: Return to RESET and STAND ===";
+    if (!g_running) { exit_code = 1; goto save; }
     manager.SendRobotCmd(SdkStateType::RESET);
-    if (!wait_state(1, 15)) goto save;
+    if (!wait_state(1, 15)) { exit_code = 1; goto save; }
     sleep(3);
     manager.SendRobotCmd(SdkStateType::STAND);
-    if (!wait_state(2, 15)) goto save;
-    sleep(2);
-
-    // ================================================================
-    // Step 5: RESET and exit DEBUG state
-    // ================================================================
-    LOG(INFO) << "=== Step 5: RESET + exit DEBUG state ===";
-    if (!g_running) goto save;
-    manager.SendRobotCmd(SdkStateType::RESET);
-    if (!wait_state(1, 15)) goto save;
-    sleep(3);
-    manager.SendRobotCmd(SdkStateType::STAND);
-    sleep(1);
+    if (!wait_state(2, 15)) { exit_code = 1; goto save; }
 
     LOG(INFO) << "=== Data collection SUCCESS ===";
 
 save:
-    if (!g_running) {
-        LOG(WARNING) << "Interrupted, returning to safe state...";
-        manager.SendRobotCmd(SdkStateType::STAND);
-        sleep(3);
+    if (!g_running || exit_code != 0) {
+        LOG(WARNING) << "Collection interrupted or failed; requesting RESET -> STAND recovery.";
         manager.SendRobotCmd(SdkStateType::RESET);
         sleep(3);
         manager.SendRobotCmd(SdkStateType::STAND);
     }
 
     // ── Write CSV files ────────────────────────────────────────────
-    const std::filesystem::path output_dir = "nix_data_collection_dir";
+    std::error_code path_error;
+    const auto executable = std::filesystem::canonical("/proc/self/exe", path_error);
+    const std::filesystem::path output_dir = path_error
+        ? std::filesystem::current_path() / "nix_data_collection_dir"
+        : executable.parent_path() / "nix_data_collection_dir";
+    if (path_error) {
+        LOG(WARNING) << "Cannot resolve executable directory: " << path_error.message()
+                     << "; writing relative to current working directory.";
+    }
     std::filesystem::create_directories(output_dir);
 
     write_joint_csv((output_dir / "joint_data.csv").string());

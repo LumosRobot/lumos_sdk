@@ -218,7 +218,9 @@ class RobotStateClient:
             self._lc.handle_timeout(200)
             if self.last_status is None:
                 continue
-            if self.status_count > printed and self.status_count % max(print_every, 1) == 0:
+            if self.status_count > printed and (
+                self.status_count == 1 or self.status_count % max(print_every, 1) == 0
+            ):
                 print(f"[Status] messages={self.status_count} {self.last_status.summary()}")
                 printed = self.status_count
 
@@ -307,8 +309,12 @@ def cmd_listen(args: argparse.Namespace) -> int:
     print(f"监听 {CH_STATUS} url={lcm_url_from_args(args)}")
     try:
         client.listen(duration=args.duration, print_every=args.print_every)
+    except OSError as exc:
+        if "lcm_handle_timeout() returned -1" not in str(exc):
+            raise
     except KeyboardInterrupt:
-        print("\n已停止监听")
+        pass
+    print("\n已停止监听")
     return 0
 
 
@@ -367,13 +373,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     p_stand = sub.add_parser("stand", help="执行 RESET -> STAND")
     localize_argparse(p_stand)
-    p_stand.add_argument("--enter-debug", "--enter-sdk", dest="enter_debug", action="store_true", help="确认 STAND 后继续进入 DEBUG(10)")
-    p_stand.add_argument("--no-enter-debug", "--no-enter-sdk", dest="enter_debug", action="store_false", help=argparse.SUPPRESS)
+    p_stand.add_argument("--enter-debug", action="store_true", help="确认 STAND 后继续进入 DEBUG(10)")
     p_stand.add_argument("--skip-reset", action="store_true", help="跳过 RESET，直接发送 STAND 并等待确认")
     p_stand.add_argument("--timeout", type=float, default=15.0, help="每个状态等待确认的超时时间，单位秒")
     p_stand.add_argument("--reset-settle", type=float, default=3.0, help="确认 RESET 后等待时间，单位秒")
     p_stand.add_argument("--stand-settle", type=float, default=0.0, help="确认 STAND 后继续等待站稳时间，单位秒")
-    p_stand.set_defaults(enter_debug=False)
     add_lcm_args(p_stand)
     p_stand.set_defaults(func=cmd_stand)
 
@@ -399,4 +403,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except KeyboardInterrupt:
+        print("\n已停止")
+        raise SystemExit(0)

@@ -13,18 +13,19 @@
 #include <iostream>
 #include <cstring>
 #include <cstdlib>
+#include <algorithm>
+#include <cctype>
 #include <glog/logging.h>
 
 /**
  * @brief   NIX2 DEBUG 关节级控制示例 / 策略轨迹回放工具
  *
- *         控制源（四选一，只能保留一个宏）:
- *           CONTROL_ALL            — 使用本文件示例目标值，控制全身 21 关节
- *           CONTROL_COMPONENT XXX  — 使用本文件示例目标值，控制指定组件
+ *         控制源:
+ *           --all                  — 使用本文件示例目标值，控制全身 21 关节
+ *           --component NAME       — 使用本文件示例目标值，控制指定组件
  *                                    (ARM_L / ARM_R / WAIST / LEG_L / LEG_R)
- *           CONTROL_SINGLE  <idx>  — 使用本文件示例目标值，控制单个全局索引关节
- *           CONTROL_REPLAY         — 读取 store_ref_motion.txt + kp_kd.yaml，
- *                                    按策略轨迹连续下发 21 个关节目标
+ *           --single INDEX         — 使用本文件示例目标值，控制单个全局索引关节
+ *           CONTROL_REPLAY         — 编译期开关，读取轨迹并连续下发 21 个关节目标
  *
  *         下发模式:
  *           非回放控制源必须启用 MODE_ONESHOT:
@@ -36,7 +37,9 @@
  *           1. 机器人端运行 lumos_controller
  *           2. 可选: 先运行 ./nix_lcm_sub 纯监听记录数据
  *           3. 本地 build 目录运行:
- *                ./nix_joint_cmd --hold-seconds 0.5  # 非回放示例自动结束
+ *                ./nix_joint_cmd --component WAIST --hold-seconds 0.5 # 非回放示例自动结束
+ *                ./nix_joint_cmd --single 12 --hold-seconds 0.5
+ *                ./nix_joint_cmd --all --hold-seconds 0.5
  *                ./nix_joint_cmd                     # 非回放示例保持到 Ctrl-C
  *                ./nix_joint_cmd 3                   # CONTROL_REPLAY 时回放 3 遍
  *                ./nix_joint_cmd 0                   # CONTROL_REPLAY 时无限回放
@@ -50,6 +53,7 @@
  *           17-20: ARM_R  [肩俯仰, 肩横滚, 肩偏航, 肘]
  *
  *         注意:
+ *           - 非回放目标由 --component / --single / --all 运行时选择。
  *           - MODE_CONTINUOUS 已移除；回放是否循环由 argv[1] 控制。
  *           - CONTROL_REPLAY 的 store_ref_motion.txt 列顺序来自 ref_motion_fields.yaml，
  *             下发前通过 kReplayMapping 重排为 SDK 组件顺序。
@@ -59,22 +63,16 @@
  */
 
 // ═══════════════════════════════════════════════════════════════════
-// 控制源 — 四选一，只保留一个不注释的
+// 控制源
 // ═══════════════════════════════════════════════════════════════════
-// 示例目标控制：使用下方 g_leg_l/g_arm_l/... 数组里的固定目标值。
-//#define CONTROL_ALL          
-//#define CONTROL_COMPONENT static_cast<int>(SdkComponentType::LEG_R) // ARM_L | ARM_R | WAIST | LEG_L | LEG_R
-#define CONTROL_SINGLE  12        // 全局索引: 12 = WAIST 腰
+// 非回放模式通过 --all / --component / --single 在运行时选择。
+// 不传选择参数时默认 --single 12（WAIST）。
 
 // 策略轨迹回放：读取 store_ref_motion.txt + kp_kd.yaml，按 argv[1] 指定遍数回放。
 // #define CONTROL_REPLAY
 
 // 仅非 CONTROL_REPLAY 控制源使用；CONTROL_REPLAY 不要打开这个宏。
 #define MODE_ONESHOT
-
-#if (defined(CONTROL_ALL) + defined(CONTROL_COMPONENT) + defined(CONTROL_SINGLE) + defined(CONTROL_REPLAY)) != 1
-#error "Define exactly one control source: CONTROL_ALL, CONTROL_COMPONENT, CONTROL_SINGLE, or CONTROL_REPLAY."
-#endif
 
 #ifdef MODE_CONTINUOUS
 #error "MODE_CONTINUOUS has been removed. CONTROL_REPLAY loops continuously by frame count; non-replay modes use MODE_ONESHOT."
@@ -200,35 +198,51 @@ static SdkJointCmd make_cmd(const JointTarget& t) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 根据宏选择要控制的关节集合
+// 根据运行时参数选择要控制的关节集合
 // ═══════════════════════════════════════════════════════════════════
-static std::vector<SdkJointCmd> build_target_cmds() {
+enum class TargetMode {
+    SINGLE,
+    COMPONENT,
+    ALL,
+};
+
+struct OneshotOptions {
+    double hold_seconds = 0.0;
+    TargetMode mode = TargetMode::SINGLE;
+    int single_index = 12;
+    SdkComponentType component = SdkComponentType::WAIST;
+};
+
+template <std::size_t N>
+static void append_targets(std::vector<SdkJointCmd>& cmds, JointTarget (&targets)[N]) {
+    for (const auto& target : targets) cmds.push_back(make_cmd(target));
+}
+
+static std::vector<SdkJointCmd> build_target_cmds(const OneshotOptions& options) {
     std::vector<SdkJointCmd> cmds;
 
-#if defined(CONTROL_ALL)
-    // 全身示例目标按 controller robot_joint_names / SDK 下发顺序组装。
-    for (auto& j : g_leg_l)  cmds.push_back(make_cmd(j));
-    for (auto& j : g_leg_r)  cmds.push_back(make_cmd(j));
-    for (auto& j : g_waist)  cmds.push_back(make_cmd(j));
-    for (auto& j : g_arm_l)  cmds.push_back(make_cmd(j));
-    for (auto& j : g_arm_r)  cmds.push_back(make_cmd(j));
+    if (options.mode == TargetMode::ALL) {
+        append_targets(cmds, g_leg_l);
+        append_targets(cmds, g_leg_r);
+        append_targets(cmds, g_waist);
+        append_targets(cmds, g_arm_l);
+        append_targets(cmds, g_arm_r);
+        return cmds;
+    }
 
-#elif defined(CONTROL_COMPONENT)
-    // CONTROL_COMPONENT 定义为 SdkComponentType 的整数值。
-    #define XX(name, arr) if (CONTROL_COMPONENT == static_cast<int>(SdkComponentType::name)) { for (auto& j : arr) cmds.push_back(make_cmd(j)); }
-    XX(ARM_L,  g_arm_l)
-    XX(ARM_R,  g_arm_r)
-    XX(WAIST,  g_waist)
-    XX(LEG_L,  g_leg_l)
-    XX(LEG_R,  g_leg_r)
-    #undef XX
+    if (options.mode == TargetMode::COMPONENT) {
+        switch (options.component) {
+            case SdkComponentType::ARM_L: append_targets(cmds, g_arm_l); break;
+            case SdkComponentType::ARM_R: append_targets(cmds, g_arm_r); break;
+            case SdkComponentType::WAIST: append_targets(cmds, g_waist); break;
+            case SdkComponentType::LEG_L: append_targets(cmds, g_leg_l); break;
+            case SdkComponentType::LEG_R: append_targets(cmds, g_leg_r); break;
+            default: break;
+        }
+        return cmds;
+    }
 
-#elif defined(CONTROL_REPLAY)
-    // 轨迹回放模式不使用 build_target_cmds，在 main() 中独立处理
-    return cmds;  // 返回空列表，避免和示例目标控制混用
-
-#elif defined(CONTROL_SINGLE)
-    // CONTROL_SINGLE 定义为全局索引 0-20
+    // SINGLE 使用 NIX 全局关节索引 0-20。
     static JointTarget* all_joints[kTotalJoints] = {
         &g_leg_l[0], &g_leg_l[1], &g_leg_l[2], &g_leg_l[3], &g_leg_l[4], &g_leg_l[5], // 0-5
         &g_leg_r[0], &g_leg_r[1], &g_leg_r[2], &g_leg_r[3], &g_leg_r[4], &g_leg_r[5], // 6-11
@@ -236,11 +250,10 @@ static std::vector<SdkJointCmd> build_target_cmds() {
         &g_arm_l[0], &g_arm_l[1], &g_arm_l[2], &g_arm_l[3],                         // 13-16
         &g_arm_r[0], &g_arm_r[1], &g_arm_r[2], &g_arm_r[3],                         // 17-20
     };
-    int idx = CONTROL_SINGLE;
+    const int idx = options.single_index;
     if (idx >= 0 && idx < kTotalJoints) {
         cmds.push_back(make_cmd(*all_joints[idx]));
     }
-#endif
 
     return cmds;
 }
@@ -473,8 +486,20 @@ static bool parseReplayLoops(int argc, char* argv[], int& loops) {
 }
 
 #ifndef CONTROL_REPLAY
-static bool parseOneshotArgs(int argc, char* argv[], double& hold_seconds) {
-    hold_seconds = 0.0;  // <=0 keeps the historical "hold until Ctrl-C" behavior.
+static bool parse_component_name(std::string name, SdkComponentType& component) {
+    std::transform(name.begin(), name.end(), name.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
+    if (name == "ARM_L") component = SdkComponentType::ARM_L;
+    else if (name == "ARM_R") component = SdkComponentType::ARM_R;
+    else if (name == "WAIST") component = SdkComponentType::WAIST;
+    else if (name == "LEG_L") component = SdkComponentType::LEG_L;
+    else if (name == "LEG_R") component = SdkComponentType::LEG_R;
+    else return false;
+    return true;
+}
+
+static bool parseOneshotArgs(int argc, char* argv[], OneshotOptions& options) {
+    bool target_selected = false;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--hold-seconds") == 0) {
             if (i + 1 >= argc) {
@@ -487,7 +512,37 @@ static bool parseOneshotArgs(int argc, char* argv[], double& hold_seconds) {
                 LOG(ERROR) << "Invalid --hold-seconds value: '" << argv[i] << "'";
                 return false;
             }
-            hold_seconds = value;
+            options.hold_seconds = value;
+        } else if (std::strcmp(argv[i], "--component") == 0) {
+            if (target_selected || i + 1 >= argc
+                    || !parse_component_name(argv[++i], options.component)) {
+                LOG(ERROR) << "--component requires one of ARM_L, ARM_R, WAIST, LEG_L, LEG_R"
+                           << " and cannot be combined with --single/--all.";
+                return false;
+            }
+            options.mode = TargetMode::COMPONENT;
+            target_selected = true;
+        } else if (std::strcmp(argv[i], "--single") == 0) {
+            if (target_selected || i + 1 >= argc) {
+                LOG(ERROR) << "--single requires an index and cannot be combined with --component/--all.";
+                return false;
+            }
+            char* end = nullptr;
+            const long value = std::strtol(argv[++i], &end, 10);
+            if (end == argv[i] || *end != '\0' || value < 0 || value >= kTotalJoints) {
+                LOG(ERROR) << "--single index must be in [0, " << kTotalJoints - 1 << "].";
+                return false;
+            }
+            options.mode = TargetMode::SINGLE;
+            options.single_index = static_cast<int>(value);
+            target_selected = true;
+        } else if (std::strcmp(argv[i], "--all") == 0) {
+            if (target_selected) {
+                LOG(ERROR) << "--all cannot be combined with --component/--single.";
+                return false;
+            }
+            options.mode = TargetMode::ALL;
+            target_selected = true;
         } else {
             LOG(ERROR) << "Unknown argument: '" << argv[i] << "'. Use --help for usage.";
             return false;
@@ -522,10 +577,13 @@ static std::vector<SdkJointCmd> buildReplayCmds(
 // ═══════════════════════════════════════════════════════════════════
 int main(int argc, char* argv[]) {
     if (argc > 1 && (std::strcmp(argv[1], "--help") == 0 || std::strcmp(argv[1], "-h") == 0)) {
-        std::cout << "Usage: " << argv[0] << " [replay_loops]\n"
+        std::cout << "Usage: " << argv[0]
+              << " [--component NAME | --single INDEX | --all] [--hold-seconds N]\n"
+              << "       " << argv[0] << " [replay_loops]  # CONTROL_REPLAY build\n"
                   << "NIX joint command demo. Enters DEBUG and publishes joint_cmds_lcmt.\n"
-                  << "Current build-time control source is selected by CONTROL_* macros in example/nix_joint_cmd.cpp.\n"
-                  << "Non-replay builds also support: --hold-seconds N (0 means hold until Ctrl-C).\n"
+              << "Components: ARM_L, ARM_R, WAIST, LEG_L, LEG_R.\n"
+              << "Default non-replay target: --single 12 (WAIST).\n"
+              << "--hold-seconds N: 0 means hold until Ctrl-C.\n"
                   << "For day-to-day testing prefer python/nix_joint_cmd.py with --dry-run first.\n";
         return 0;
     }
@@ -538,6 +596,21 @@ int main(int argc, char* argv[]) {
 
     int exit_code = 0;
 
+#ifndef CONTROL_REPLAY
+    OneshotOptions options;
+    if (!parseOneshotArgs(argc, argv, options)) {
+        google::ShutdownGoogleLogging();
+        return 2;
+    }
+    const double hold_seconds = options.hold_seconds;
+    auto cmds = build_target_cmds(options);
+    if (cmds.empty()) {
+        LOG(ERROR) << "No joints selected; check --component/--single/--all.";
+        google::ShutdownGoogleLogging();
+        return 1;
+    }
+#endif
+
     SdkRobotManager manager;
     manager.Init();
     manager.SetRobotStatusCb(on_robot_status);
@@ -545,19 +618,6 @@ int main(int argc, char* argv[]) {
     manager.SetJointDataCb(on_joint_data);
 
     bool debug_state_entered = false;
-
-#ifndef CONTROL_REPLAY
-    // 构建目标指令（由编译期宏选择 CONTROL_ALL/COMPONENT/SINGLE）
-    double hold_seconds = 0.0;
-    if (!parseOneshotArgs(argc, argv, hold_seconds)) {
-        return 2;
-    }
-    auto cmds = build_target_cmds();
-    if (cmds.empty()) {
-        LOG(ERROR) << "No joints selected — check CONTROL_xxx macro.";
-        return 1;
-    }
-#endif
 
 #ifdef CONTROL_REPLAY
     std::string motion_path;
@@ -618,8 +678,12 @@ int main(int argc, char* argv[]) {
         goto cleanup;
     }
     manager.SendRobotCmd(SdkStateType::DEBUG);
+    if (!wait_state(10, 15)) {
+        LOG(ERROR) << "DEBUG state was not confirmed; joint commands will not be sent.";
+        exit_code = 1;
+        goto cleanup;
+    }
     debug_state_entered = true;
-    sleep(1);
 
 #ifdef CONTROL_REPLAY
     // ── 加载轨迹回放文件 ──────────────────────────────────────

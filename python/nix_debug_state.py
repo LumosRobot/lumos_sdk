@@ -115,7 +115,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p_enter.add_argument("--skip-reset", action="store_true", help="跳过 RESET，直接 STAND -> DEBUG")
     p_enter.add_argument("--timeout", type=float, default=15.0, help="每个状态等待确认的超时时间，单位秒")
     p_enter.add_argument("--reset-settle", type=float, default=3.0, help="确认 RESET 后等待时间，单位秒")
-    p_enter.add_argument("--stand-settle", type=float, default=0.0, help="确认 STAND 后继续等待站稳时间，单位秒")
+    p_enter.add_argument("--stand-settle", type=float, default=10.0, help="确认 STAND 后继续等待站稳时间，单位秒")
     add_lcm_args(p_enter)
     p_enter.set_defaults(func=cmd_enter)
 
