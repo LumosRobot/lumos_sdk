@@ -229,8 +229,6 @@ python3 python/nix_lcm_pub_mock.py --local --count 1 --joints 21
 
 ## C++ 示例边界
 
-完整测试顺序和结果判定见 [docs/nix_sdk_test.md](docs/nix_sdk_test.md)。
-
 - `nix_lcm_sub`: 被动监听，安全，不发状态或关节命令。
 - `nix_robot_state`: 默认执行 `RESET -> STAND`；`state ID` 测试单个状态；`--walk-test` 发送行走命令。
 - `nix_debug_state`: 发送 `RESET -> STAND -> DEBUG -> RESET -> STAND`，并检查命令回显。
