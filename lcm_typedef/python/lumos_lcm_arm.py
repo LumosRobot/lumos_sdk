@@ -8,6 +8,7 @@ from io import BytesIO
 import struct
 
 class lumos_lcm_arm(object):
+    """ DEPRECATED: use arm_cmd_lcmt instead (topic: lcm_arm_cmd) """
 
     __slots__ = ["armstate"]
 

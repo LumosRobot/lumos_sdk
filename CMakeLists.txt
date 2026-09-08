@@ -11,13 +11,7 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
-# RPATH for locally-built glog
-set(CMAKE_INSTALL_RPATH /tmp/glog-local/lib)
-set(CMAKE_BUILD_RPATH /tmp/glog-local/lib)
-
 # ── Dependencies ───────────────────────────────────────────────
-# Use local glog 0.7.1 (system glog 0.6.0 crashes with GCC 13 on exit)
-set(glog_DIR /tmp/glog-local/lib/cmake/glog)
 find_package(glog REQUIRED)
 find_package(lcm REQUIRED)
 find_package(gflags REQUIRED)

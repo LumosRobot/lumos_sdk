@@ -4,13 +4,13 @@
 #include <thread>
 #include <atomic>
 #include <lcm/lcm-cpp.hpp>
-#include <sdk_lcmt_joint_datasets.hpp>
-#include <microstrain_lcmt.hpp>
+#include <joint_datasets_lcmt.hpp>
+#include <imu_data_lcmt.hpp>
 #include <robot_cmd_lcmt.hpp>
 #include <robot_status_lcmt.hpp>
 
-using JointDateCb = void (*)(const sdk_lcmt_joint_datasets*);
-using ImuDateCb = void (*)(const microstrain_lcmt*);
+using JointDateCb = void (*)(const joint_datasets_lcmt*);
+using ImuDateCb = void (*)(const imu_data_lcmt*);
 using GameHandlerCmdCb = void (*)(const robot_cmd_lcmt*);
 using RobotStatusCb = void (*)(const robot_status_lcmt*);
 
@@ -23,7 +23,6 @@ public:
 
     bool SendRobotCmd(SdkStateType state, float vx = 0, float vy = 0, float vyaw = 0, int8_t policy_type = 0);
     bool SendJointCmds(const std::vector<SdkJointCmd>& joint_cmds);
-    bool SendModeCmd(int mode); // 0: RL control mode,  1: SDK control mode
 
     bool SetJointDataCb(JointDateCb cb);
     bool SetImuDataCb(ImuDateCb cb);

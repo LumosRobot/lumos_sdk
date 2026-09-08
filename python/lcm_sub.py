@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import lcm
 # 导入你生成的 LCM 消息类型
-from lcm_typedef.sdk_lcmt_joint_cmds import sdk_lcmt_joint_cmds
+from lcm_typedef.joint_cmds_lcmt import joint_cmds_lcmt
 
 # ==================== 回调函数：收到消息就进来 ====================
 def handler(channel, data):
@@ -12,7 +12,7 @@ def handler(channel, data):
     data: 原始字节
     """
     # 解码消息
-    msg = sdk_lcmt_joint_cmds.decode(data)
+    msg = joint_cmds_lcmt.decode(data)
     
     print("=" * 50)
     print(f"📥 收到 LCM 话题: {channel}")

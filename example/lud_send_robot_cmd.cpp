@@ -1,10 +1,33 @@
 #include "sdk_robot_manager.hpp"
 #include <unistd.h>
+#include <cstring>
+#include <iostream>
 #include <glog/logging.h>
 
+/**
+ * LUD 状态/速度命令示例。
+ *
+ * 功能:
+ *   依次发送 RESET -> STAND -> RL_WALK_AMP，并下发一个 yaw 速度示例，
+ *   最后发送 RL_LIEDOWN。
+ *
+ * 使用:
+ *   cd lumos_sdk
+ *   ./build/lud_send_robot_cmd --help
+ *   ./build/lud_send_robot_cmd
+ *
+ * 注意:
+ *   这是 LUD 机器人动作示例，不是 NIX 真机 smoke test。运行前必须确认
+ *   机器人型号、周围空间、急停和 controller 状态。
+ */
 int main(int argc, char *argv[])
 {
-  (void)(argc);
+  if (argc > 1 && (std::strcmp(argv[1], "--help") == 0 || std::strcmp(argv[1], "-h") == 0)) {
+    std::cout << "Usage: " << argv[0] << "\n"
+              << "LUD robot command demo. Sends RESET -> STAND -> RL_WALK_AMP yaw -> RL_LIEDOWN.\n"
+              << "Run only on a prepared LUD robot with clear space.\n";
+    return 0;
+  }
 
   FLAGS_stderrthreshold = 0; // 将所有级别的日志都输出到标准错误
   FLAGS_minloglevel = 0;     // 设置最小日志级别，0=INFO, 1=WARNING, 2=ERROR, 3=FATAL
