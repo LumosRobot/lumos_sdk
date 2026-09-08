@@ -112,6 +112,21 @@ bash config_network_lcm.sh enp3s0
 
 ## 编译
 
+首次配置 Conda 环境并安装 LCM 1.5.2：
+
+```bash
+conda env create -f environment.yml
+conda activate lumos-sdk
+bash scripts/install_lcm_1_5_2.sh
+```
+
+确认环境中的版本：
+
+```bash
+lcm-gen --version  # lcm-gen 1.5.2
+python -c "import lcm; print(lcm.__file__)"
+```
+
 ```bash
 cd lumos_sdk
 cmake -S . -B build
@@ -143,6 +158,13 @@ cd lumos_sdk
 
 ```bash
 python3 python/nix_lcm_sub.py --once --print-limit 21
+```
+
+也可以使用 `lcm-spy` GUI 查看实时 LCM 数据，作为补充调试工具：
+
+```bash
+sudo apt install liblcm-java
+lcm-spy
 ```
 
 进入 DEBUG 前，先 dry-run：
@@ -208,8 +230,8 @@ python3 python/nix_lcm_pub_mock.py --local --count 1 --joints 21
 ## C++ 示例边界
 
 - `nix_lcm_sub`: 被动监听，安全，不发状态或关节命令。
-- `nix_robot_state`: 默认只做 `RESET -> STAND` smoke test；`--walk-test` 才发送低速行走命令。
-- `nix_debug_state`: 发送 `RESET -> STAND -> DEBUG -> RESET -> STAND`，不发关节目标。
+- `nix_robot_state`: 默认执行 `RESET -> STAND`；`state ID` 测试单个状态；`--walk-test` 发送行走命令。
+- `nix_debug_state`: 发送 `RESET -> STAND -> DEBUG -> RESET -> STAND`，并检查命令回显。
 - `nix_joint_cmd`: 会进入 DEBUG 并发布关节命令；真机运行前先用 Python 工具做小目标验证。
 - `nix_data_collection`: 主动采集场景，会发送 RESET/STAND/DEBUG/RL/MIMIC 等状态，不是普通 smoke test。
 - `lud_send_robot_cmd`、`lud_send_joint_cmds`: LUD 机器人示例，不用于 NIX 真机。

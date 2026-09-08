@@ -262,8 +262,19 @@ static void write_status_csv(const std::string& path) {
     LOG(INFO) << "Status data appended: " << path << " (" << g_status_records.size() << " records)";
 }
 
+static std::filesystem::path output_directory() {
+    std::error_code error;
+    const auto executable = std::filesystem::canonical("/proc/self/exe", error);
+    if (!error) {
+        return executable.parent_path() / "nix_lcm_sub_dir";
+    }
+    LOG(WARNING) << "Cannot resolve executable directory: " << error.message()
+                 << "; writing relative to current working directory.";
+    return std::filesystem::current_path() / "nix_lcm_sub_dir";
+}
+
 static void write_all_csv() {
-    const std::filesystem::path output_dir = "nix_lcm_sub_dir";
+    const std::filesystem::path output_dir = output_directory();
     std::filesystem::create_directories(output_dir);
 
     write_joint_csv((output_dir / "joint_data.csv").string());
@@ -277,7 +288,7 @@ int main(int argc, char* argv[]) {
     if (argc > 1 && (std::strcmp(argv[1], "--help") == 0 || std::strcmp(argv[1], "-h") == 0)) {
         std::cout << "Usage: " << argv[0] << "\n"
                   << "Passive NIX LCM subscriber. Does not send robot or joint commands.\n"
-                  << "Writes CSV files to nix_lcm_sub_dir when stopped with Ctrl-C.\n";
+                  << "Writes CSV files beside the executable in nix_lcm_sub_dir when stopped with Ctrl-C.\n";
         return 0;
     }
     signal(SIGINT, sigint_handler);
