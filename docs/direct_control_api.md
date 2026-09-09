@@ -8,6 +8,7 @@
 
 ## 基础信息
 
+- **机器人热点**：Wi-Fi: `nix_NIX005`；pwd: `nix_NIX005_pd`
 - **Base URL**: `http://192.168.1.1:8080`（连接机器人热点后）
 - **协议**: HTTP/JSON（视频为 MJPEG 流；音频上传为 `multipart/form-data`）
 - **鉴权**: 无（局域网直连，端口见 `config.yml` 的 `direct_control.port`）
@@ -146,13 +147,6 @@ curl -X POST http://192.168.1.1:8080/api/audio \
   -F "file=@/path/to/greeting.mp3"
 ```
 
-```python
-import requests
-with open("greeting.mp3", "rb") as f:
-    r = requests.post("http://192.168.1.1:8080/api/audio",
-                      files={"file": ("greeting.mp3", f, "audio/mpeg")})
-print(r.json())
-```
 
 > 文件名会经过 `os.path.basename` 清洗（防路径穿越）；非 `.mp3` 后缀会自动补 `.mp3`。若机器人处于全局静音（`voice_cmd state=111 type=1`），上传的音频不会被播放（遵循静音语义）。
 
@@ -354,54 +348,3 @@ curl -X POST http://192.168.1.1:8080/api/video/toggle \
 | 111 | 1/0 | 全局静音 开/关 |
 
 > 设置 `audio_file`（相对 `lumos_voice` 音频目录或绝对路径）时，`LCMListener` 会优先播放该文件并忽略 `state` 的常规状态音逻辑。
-
----
-
-## 六、Python 集成示例
-
-```python
-import requests
-
-BASE = "http://192.168.1.1:8080"
-
-# 切换状态（站立）
-requests.post(f"{BASE}/api/cmd", json={"state": 2}).json()
-
-# 速度控制（前进，不切状态）
-requests.post(f"{BASE}/api/cmd", json={"state": 3, "x": 0.5, "yaw": 0.0}).json()
-
-# 手臂动作
-requests.post(f"{BASE}/api/arm_cmd", json={"armstate": 9}).json()
-
-# LED 灯效（蓝灯常亮）
-requests.post(f"{BASE}/api/led", json={"control_word": 1}).json()
-
-# 目标点导航
-requests.post(f"{BASE}/api/goal_location",
-              json={"x": 1.0, "y": 0.0, "yaw": 0.0, "duration": 5.0, "execute": 1}).json()
-
-# 上传并播放 MP3
-with open("greeting.mp3", "rb") as f:
-    requests.post(f"{BASE}/api/audio",
-                  files={"file": ("greeting.mp3", f, "audio/mpeg")}).json()
-
-# 拉取遥测
-telemetry = requests.get(f"{BASE}/api/telemetry").json()
-battery = telemetry["battery_info"]["percentage"]
-
-
-#Python 拉流示例：
-import requests
-
-resp = requests.get("http://192.168.1.1:8080/api/video", stream=True)
-bytes_buffer = b""
-for chunk in resp.iter_content(chunk_size=1024):
-    bytes_buffer += chunk
-    a = bytes_buffer.find(b"\xff\xd8")   # JPEG 起始
-    b = bytes_buffer.find(b"\xff\xd9")   # JPEG 结束
-    if a != -1 and b != -1:
-        jpg = bytes_buffer[a:b+2]
-        bytes_buffer = bytes_buffer[b+2:]
-        # 把 jpg 存文件 / 喂给 cv2.imdecode 显示
-
-```
