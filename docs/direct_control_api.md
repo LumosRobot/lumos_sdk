@@ -8,10 +8,33 @@
 
 ## 基础信息
 
-- **机器人热点**：Wi-Fi: `nix_NIX005`；pwd: `nix_NIX005_pd`
-- **Base URL**: `http://192.168.1.1:8080`（连接机器人热点后）
-- **协议**: HTTP/JSON（视频为 MJPEG 流；音频上传为 `multipart/form-data`）
-- **鉴权**: 无（局域网直连，端口见 `config.yml` 的 `direct_control.port`）
+- **机器人热点**：Wi-Fi：`nix_NIXxxx`；密码：`nix_NIXxxx_pd`
+  - `xxx` 不固定，机器人上电后才会开启热点。
+  - 可根据 `nix_NIX` 前缀识别机器人，通常末两位数字为机器人编号。
+- **Base URL**：连接机器人热点后，使用 `ifconfig` 或 `ip addr` 查看无线网卡 IP，
+  将该 IP 的最后一段替换为 `1`，并使用端口 `8080`。
+
+例如无线网卡信息如下：
+
+```text
+wlp0s20f3: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+    inet 10.151.26.100  netmask 255.255.255.0  broadcast 10.151.26.255
+    inet6 fe80::a939:fcf:1f6:d4bc  prefixlen 64  scopeid 0x20<link>
+    ether e0:d5:5d:8b:26:03  txqueuelen 1000  (以太网)
+    RX packets 457406  bytes 285959057 (285.9 MB)
+    RX errors 0  dropped 3456  overruns 0  frame 0
+    TX packets 97999  bytes 64983247 (64.9 MB)
+    TX errors 0  dropped 0  overruns 0  carrier 0  collisions 0
+```
+
+则机器人地址为：
+
+```text
+http://10.151.26.1:8080
+```
+
+- **协议**：HTTP/JSON（视频为 MJPEG 流；音频上传为 `multipart/form-data`）
+- **鉴权**：无（局域网直连，端口见 `config.yml` 的 `direct_control.port`）
 - **默认端口 / 视频 / 音频目录**（`config.yml` → `direct_control`）：
 
 ```yaml
